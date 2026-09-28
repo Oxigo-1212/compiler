@@ -1,8 +1,33 @@
 add_rules("mode.debug", "mode.release")
 
+rule("flex")
+    set_extensions(".l")
+    on_buildcmd_file(function (target, batchcmds, sourcefile, opt)
+        import("lib.detect.find_tool")
+
+        local flex = assert(find_tool("flex"), "flex not found! Please install flex.")
+        local generated_dir = path.join(target:autogendir(), "flex")
+        local cppfile = path.join(generated_dir, path.basename(sourcefile) .. ".cpp")
+        local objectfile = target:objectfile(cppfile)
+
+        table.insert(target:objectfiles(), objectfile)
+
+        batchcmds:show_progress(opt.progress, "${color.build.object}flex %s", sourcefile)
+        batchcmds:mkdir(generated_dir)
+        batchcmds:vrunv(flex.program, {"-o", cppfile, sourcefile})
+        batchcmds:compile(cppfile, objectfile)
+
+        batchcmds:add_depfiles(sourcefile)
+        batchcmds:set_depmtime(os.mtime(objectfile))
+        batchcmds:set_depcache(target:dependfile(objectfile))
+        batchcmds:mkdir(generated_dir)
+    end)
+
 target("compiler")
-set_kind("binary")
-add_files("src/*.cpp")
+    set_kind("binary")
+    set_languages("cxx20")
+    add_files("src/main.cpp")
+    add_files("src/*.l", {rules = "flex"})
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io

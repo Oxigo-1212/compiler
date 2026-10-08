@@ -12,10 +12,19 @@ enum Token {
     TOK_NUMBER,
     TOK_STRING,
 
-    TOK_VAL,
-    TOK_RETURN,
+    TOK_BEGIN,
+    TOK_END,
+    TOK_INT,
+    TOK_BOOL,
+    TOK_TRUE,
+    TOK_FALSE,
     TOK_IF,
+    TOK_THEN,
     TOK_ELSE,
+    TOK_DO,
+    TOK_WHILE,
+    TOK_FOR,
+    TOK_PRINT,
 
     TOK_EQUAL_EQUAL,
     TOK_NOT_EQUAL,
@@ -28,21 +37,44 @@ std::string tokenText;
 
 DIGIT       [0-9]
 IDENT_START [a-zA-Z_]
-IDENT_CHAR  [a-zA-Z0-9_]
+IDENTIFIER  {IDENT_START}({IDENT_START}|{DIGIT})*
+
+%x BLOCK_COMMENT
 
 %%
 
 [ \t\r]+                       ;
 \n                             ;
 
-"//".*                         ;
+"//"[^\r\n]*                   ;
+"/*"                           { BEGIN(BLOCK_COMMENT); }
+<BLOCK_COMMENT>"*/"           { BEGIN(INITIAL); }
+<BLOCK_COMMENT>\n             ;
+<BLOCK_COMMENT>.              ;
+<BLOCK_COMMENT><<EOF>>        {
+                                   std::fprintf(
+                                       stderr,
+                                       "Error: unterminated block comment at line %d\n",
+                                       yylineno
+                                   );
+                                   std::exit(EXIT_FAILURE);
+                               }
 
-"val"                          { return TOK_VAL; }
-"return"                       { return TOK_RETURN; }
+"begin"                        { return TOK_BEGIN; }
+"end"                          { return TOK_END; }
+"int"                          { return TOK_INT; }
+"bool"                         { return TOK_BOOL; }
+"true"                         { return TOK_TRUE; }
+"false"                        { return TOK_FALSE; }
 "if"                           { return TOK_IF; }
+"then"                         { return TOK_THEN; }
 "else"                         { return TOK_ELSE; }
+"do"                           { return TOK_DO; }
+"while"                        { return TOK_WHILE; }
+"for"                          { return TOK_FOR; }
+"print"                        { return TOK_PRINT; }
 
-{IDENT_START}{IDENT_CHAR}*     {
+{IDENTIFIER}                   {
                                    tokenText = yytext;
                                    return TOK_IDENTIFIER;
                                }

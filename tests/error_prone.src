@@ -1,0 +1,34 @@
+// Intentionally invalid UPL: demonstrate recovery across multiple lines.
+// Valid statements between errors should still be parsed.
+begin
+    int x=0;
+    bool ready=true;
+
+    int missing=;               // Missing initializer expression.
+    int total=1                 // Missing semicolon; reported at the next token.
+    print(x);
+    print(x+);                  // Missing right operand of +.
+
+    if (ready) then {
+        x=x*;                   // Missing right operand of *.
+        print(x);
+    } else {
+        print();                // Missing print expression.
+    }
+
+    do {
+        int factor=2;
+        x=(x+factor;            // Missing closing parenthesis.
+        print(x);
+    } while (x>);               // Missing comparison operand.
+
+    for (int i=0; 3>i; i=i+1) {
+        print(i*);              // Missing multiplication operand inside a loop.
+    }
+
+    int bad1name;               // Invalid identifier: letters after digits.
+    int _bad;                   // Invalid identifier: starts with underscore.
+    @;                          // Unsupported character.
+    print(x==);                 // Missing equality operand.
+    print(12345);               // Valid final statement proves recovery continued.
+end

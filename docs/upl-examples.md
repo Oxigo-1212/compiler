@@ -12,10 +12,10 @@ begin
 end
 ```
 
-Chạy từ thư mục gốc dự án sau khi build bằng `xmake`:
+Chạy từ thư mục gốc dự án bằng Cargo (cần Rust, Flex, Bison và trình biên dịch C):
 
 ``` sh
-xmake run compiler <<'UPL'
+cargo run --quiet --offline <<'UPL'
 begin
     // Kiem tra thu tu uu tien
     int x=1+2*3;

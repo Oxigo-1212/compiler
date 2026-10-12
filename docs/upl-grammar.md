@@ -12,26 +12,26 @@ Bỏ qua khoảng trắng và comment `//`, `/* ... */`. Comment khối không l
 
 ## Văn phạm phi ngữ cảnh
 
-`::=`: luật sinh; `|`: lựa chọn; `ε`: rỗng. Ký hiệu bắt đầu: `Program`; kết thúc đầu vào: EOF. Terminal đặt trong dấu nháy kép; `ID` và `INTEGER` là token.
+`→`: luật sinh; `|`: lựa chọn; `ε`: rỗng. Ký hiệu bắt đầu: `Program`; kết thúc đầu vào: EOF. Terminal đặt trong dấu nháy kép; `ID` và `INTEGER` là token.
 
 ```
-Program ::= "begin" Statements "end"
-Statements ::= Statements Statement | ε
-Statement ::= Declaration ";" | Assignment ";" | IfStatement | DoStatement | ForStatement | PrintStatement
-Block ::= "{" Statements "}"
-Declaration ::= Type ID | Type ID "=" Expression
-Type ::= "int" | "bool"
-Assignment ::= ID "=" Expression
-IfStatement ::= "if" "(" Expression ")" "then" Block | "if" "(" Expression ")" "then" Block "else" Block
-DoStatement ::= "do" Block "while" "(" Expression ")" ";"
-ForStatement ::= "for" "(" ForInit ";" Expression ";" Assignment ")" Block
-ForInit ::= Declaration | Assignment
-PrintStatement ::= "print" "(" Expression ")" ";"
-Expression ::= Sum | Sum Comparison Sum
-Comparison ::= ">" | ">=" | "=="
-Sum ::= Product | Sum "+" Product
-Product ::= Primary | Product "*" Primary
-Primary ::= ID | INTEGER | "true" | "false" | "(" Expression ")"
+Program → "begin" Statements "end"
+Statements → Statements Statement | ε
+Statement → Declaration ";" | Assignment ";" | IfStatement | DoStatement | ForStatement | PrintStatement
+Block → "{" Statements "}"
+Declaration → Type ID | Type ID "=" Expression
+Type → "int" | "bool"
+Assignment → ID "=" Expression
+IfStatement → "if" "(" Expression ")" "then" Block | "if" "(" Expression ")" "then" Block "else" Block
+DoStatement → "do" Block "while" "(" Expression ")" ";"
+ForStatement → "for" "(" ForInit ";" Expression ";" Assignment ")" Block
+ForInit → Declaration | Assignment
+PrintStatement → "print" "(" Expression ")" ";"
+Expression → Sum | Sum Comparison Sum
+Comparison → ">" | ">=" | "=="
+Sum → Product | Sum "+" Product
+Product → Primary | Product "*" Primary
+Primary → ID | INTEGER | "true" | "false" | "(" Expression ")"
 ```
 
 ## Quy ước cần thiết

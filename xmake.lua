@@ -7,7 +7,18 @@ set_description("Build the C++ parser tests")
 option_end()
 
 if has_config("tests") then
-	add_requires("doctest 2.4.12", { configs = { cmake = false } })
+  add_requires("doctest 2.4.12", { configs = { cmake = false } })
+  target("parser_tests")
+	set_kind("binary")
+	set_languages("cxx20")
+	set_rundir(os.projectdir())
+	add_includedirs("src")
+	add_packages("doctest")
+	add_rules("bison")
+	add_files("tests/parser_tests.cpp", "src/ast.cpp")
+	add_files("src/specs/*.l", { rules = "flex" })
+	add_files("src/specs/*.y")
+	add_tests("parser", { rundir = os.projectdir(), run_timeout = 30000 })
 end
 
 rule("flex")
@@ -72,16 +83,3 @@ add_rules("bison")
 add_files("src/main.cpp", "src/ast.cpp")
 add_files("src/specs/*.l", { rules = "flex" })
 add_files("src/specs/*.y")
-
-if has_config("tests") then
-	target("parser_tests")
-	set_kind("binary")
-	set_languages("cxx20")
-	add_includedirs("src")
-	add_packages("doctest")
-	add_rules("bison")
-	add_files("tests/parser_tests.cpp", "src/ast.cpp")
-	add_files("src/specs/*.l", { rules = "flex" })
-	add_files("src/specs/*.y")
-	add_tests("parser", { rundir = os.projectdir(), run_timeout = 30000 })
-end

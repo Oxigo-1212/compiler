@@ -7,8 +7,8 @@ set_description("Build the C++ parser tests")
 option_end()
 
 if has_config("tests") then
-    add_requires("doctest 2.4.12", { configs = { cmake = false } })
-    target("parser_tests")
+  add_requires("doctest 2.4.12", { configs = { cmake = false } })
+  target("parser_tests")
 	set_kind("binary")
 	set_languages("cxx20")
 	set_rundir(os.projectdir())
@@ -83,4 +83,3 @@ add_rules("bison")
 add_files("src/main.cpp", "src/ast.cpp")
 add_files("src/specs/*.l", { rules = "flex" })
 add_files("src/specs/*.y")
-

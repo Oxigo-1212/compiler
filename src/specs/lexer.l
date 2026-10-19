@@ -1,9 +1,12 @@
 %option noyywrap
 
 %{
-#include <cstdio>
+#undef BEGIN
+#define BEGIN(state) ((yy_start) = 1 + 2 * (state))
+
 #include <string>
 #include "parser.hpp"
+#include "diagnostic.h"
 
 int lexicalErrors = 0;
 static int sourceLine = 1;
@@ -32,8 +35,7 @@ static void locateToken() {
 
 static int lexicalError(const char *message) {
     ++lexicalErrors;
-    std::fprintf(stderr, "Lexical error at line %d, column %d: %s\n",
-                 yylloc.first_line, yylloc.first_column, message);
+    diagEmit(yylloc.first_line, yylloc.first_column, message);
     return YYerror; // The diagnostic is already emitted; let Bison recover.
 }
 
@@ -65,46 +67,56 @@ IDENTIFIER  {LETTER}+{DIGIT}*
                                    return 0;
                                }
 
-"begin"                        { return TOK_BEGIN; }
-"end"                          { return TOK_END; }
-"int"                          { return TOK_INT; }
-"bool"                         { return TOK_BOOL; }
-"true"                         { return TOK_TRUE; }
-"false"                        { return TOK_FALSE; }
-"if"                           { return TOK_IF; }
-"then"                         { return TOK_THEN; }
-"else"                         { return TOK_ELSE; }
-"do"                           { return TOK_DO; }
-"while"                        { return TOK_WHILE; }
-"for"                          { return TOK_FOR; }
-"print"                        { return TOK_PRINT; }
+"begin"                        { return BEGIN; }
+"end"                          { return END; }
+"int"                          { return INT; }
+"bool"                         { return BOOL; }
+"true"                         { return TRUE; }
+"false"                        { return FALSE; }
+"if"                           { return IF; }
+"then"                         { return THEN; }
+"else"                         { return ELSE; }
+"do"                           { return DO; }
+"while"                        { return WHILE; }
+"for"                          { return FOR; }
+"print"                        { return PRINT; }
 
 {IDENTIFIER}                   {
                                    yylval.text = new std::string(yytext, yyleng);
-                                   return TOK_IDENTIFIER;
+                                   return IDENTIFIER;
                                }
 
 {DIGIT}+                       {
                                    yylval.text = new std::string(yytext, yyleng);
-                                   return TOK_NUMBER;
+                                   return CONSTANT;
                                }
 
 [a-zA-Z0-9_]+                  {
                                    return lexicalError(("invalid identifier '" + std::string(yytext) + "'").c_str());
                                }
 
-"=="                           { return TOK_EQUAL_EQUAL; }
-">="                           { return TOK_GREATER_EQUAL; }
+"=="                           { return EQ_OP; }
+"!="                           { return NE_OP; }
+"<="                           { return LE_OP; }
+">="                           { return GE_OP; }
+"&&"                           { return AND_OP; }
+"||"                           { return OR_OP; }
 
 "+"                            { return '+'; }
+"-"                            { return '-'; }
 "*"                            { return '*'; }
+"/"                            { return '/'; }
+"%"                            { return '%'; }
 "="                            { return '='; }
+"!"                            { return '!'; }
+"<"                            { return '<'; }
 ">"                            { return '>'; }
 "("                            { return '('; }
 ")"                            { return ')'; }
 "{"                            { return '{'; }
 "}"                            { return '}'; }
 ";"                            { return ';'; }
+","                            { return ','; }
 
 .                              {
                                    return lexicalError(("unexpected character '" + std::string(yytext) + "'").c_str());

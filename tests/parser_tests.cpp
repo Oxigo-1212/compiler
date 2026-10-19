@@ -1,6 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include "diagnostic.h"
 #include "parser.hpp"
 #include <cstdio>
 #include <fstream>
@@ -24,6 +25,7 @@ static ParseResult parse(const std::string &source) {
   astRoot.reset();
   syntaxErrors = 0;
   resetLexer();
+  diagInit("<test>", source);
 
   // Capture the production diagnostics without adding a test-only logging API.
   auto capture = std::tmpfile();
@@ -192,27 +194,27 @@ TEST_CASE("locations survive comments all newline styles and repeated parses") {
 }
 
 TEST_CASE("syntax recovery reports independent errors across statements and blocks") {
-  struct Case { std::string source; int errors; std::vector<int> lines; };
+  struct Case { std::string source; int syntaxErrs; int lexicalErrs; std::vector<int> lines; };
   const std::vector<Case> cases = {
-      {readFile("tests/grammar_errors.src"), 2, {2, 3}},
-      {"begin\nint x=1\nint y=;\nprint(2+);\nend", 3, {3, 4}},
-      {"begin\nif (true) then {\nint x=1+\n}\nprint(1+);\nend", 2, {4, 5}},
-      {"begin\nif (true) then {\nprint(1)\n}\nprint(2+);\nend", 2, {4, 5}},
-      {"begin\nint x=;\ndo {\nprint(1+);\n} while (true);\nprint(2+);\nend", 3, {2, 4, 6}},
-      {"begin\nprint(1)\nend", 1, {3}},
-      {readFile("tests/parser_recovery.src"), 3, {3, 5}}};
+      {readFile("tests/grammar_errors.src"), 2, 0, {2, 3}},
+      {"begin\nint x=1\nint y=;\nprint(2+);\nend", 3, 0, {3, 4}},
+      {"begin\nif (true) then {\nint x=1+\n}\nprint(1+);\nend", 2, 0, {4, 5}},
+      {"begin\nif (true) then {\nprint(1)\n}\nprint(2+);\nend", 2, 0, {4, 5}},
+      {"begin\nint x=;\ndo {\nprint(1+);\n} while (true);\nprint(2+);\nend", 3, 0, {2, 4, 6}},
+      {"begin\nprint(1)\nend", 1, 0, {3}},
+      {readFile("tests/parser_recovery.src"), 3, 1, {3, 5}}};
   for (const auto &test : cases) {
     const auto result = parse(test.source);
     INFO(result.diagnostics);
-    CHECK(result.syntaxErrors == test.errors);
-    CHECK(count(result.diagnostics, "Syntax error") == test.errors);
+    CHECK(result.syntaxErrors == test.syntaxErrs);
+    CHECK(count(result.diagnostics, ": error:") == test.syntaxErrs + test.lexicalErrs);
     for (int line : test.lines) {
-      CHECK(result.diagnostics.find("line " + std::to_string(line) + ", column") != std::string::npos);
+      CHECK(result.diagnostics.find("<test>:" + std::to_string(line) + ":") != std::string::npos);
     }
   }
   const auto result = parse(readFile("tests/grammar_errors.src"));
-  CHECK(result.diagnostics.find("line 2, column 11:") != std::string::npos);
-  CHECK(result.diagnostics.find("line 3, column 13:") != std::string::npos);
+  CHECK(result.diagnostics.find("<test>:2:11: error:") != std::string::npos);
+  CHECK(result.diagnostics.find("<test>:3:13: error:") != std::string::npos);
 }
 
 TEST_CASE("lexical errors recover and unterminated comments point to their start") {
@@ -221,11 +223,11 @@ TEST_CASE("lexical errors recover and unterminated comments point to their start
   CHECK(result.lexicalErrors == 2);
   CHECK(result.syntaxErrors == 1);
   for (int line : {2, 3, 4}) {
-    CHECK(result.diagnostics.find("line " + std::to_string(line) + ", column") != std::string::npos);
+    CHECK(result.diagnostics.find("<test>:" + std::to_string(line) + ":") != std::string::npos);
   }
   const auto unclosed = parse("begin\n  /* unclosed\ncomment");
   CHECK(unclosed.lexicalErrors == 1);
-  CHECK(unclosed.diagnostics.find("Lexical error at line 2, column 3: unterminated block comment") != std::string::npos);
+  CHECK(unclosed.diagnostics.find("<test>:2:3: error: unterminated block comment") != std::string::npos);
   CHECK(parseValid("begin end").children.empty());
 }
 
@@ -235,10 +237,9 @@ TEST_CASE("error-prone sample reports twelve errors and reaches the final statem
   CHECK(result.status == 0); // Bison finishes recovery; the CLI rejects the error counts.
   CHECK(result.syntaxErrors == 9);
   CHECK(result.lexicalErrors == 3);
-  CHECK(count(result.diagnostics, "Syntax error") == 9);
-  CHECK(count(result.diagnostics, "Lexical error") == 3);
+  CHECK(count(result.diagnostics, ": error:") == 12);
   for (int line : {7, 9, 10, 13, 16, 21, 23, 26, 29, 30, 31, 32}) {
-    CHECK(result.diagnostics.find("line " + std::to_string(line) + ", column") != std::string::npos);
+    CHECK(result.diagnostics.find("<test>:" + std::to_string(line) + ":") != std::string::npos);
   }
   REQUIRE(astRoot != nullptr);
   REQUIRE_FALSE(astRoot->children.empty());

@@ -1,5 +1,11 @@
 #include "ast.h"
 
+/**
+ * Writes a string as a JSON string literal.
+ *
+ * Double quotes and backslashes are escaped, while ASCII control characters
+ * are emitted as `\u00xx` escape sequences.
+ */
 static void printString(std::ostream &out, const std::string &value) {
   constexpr char hex[] = "0123456789abcdef";
   out << '"';
@@ -15,6 +21,13 @@ static void printString(std::ostream &out, const std::string &value) {
   out << '"';
 }
 
+/**
+ * Serializes an AST node and its descendants as indented JSON.
+ *
+ * @param out Stream that receives the serialized AST.
+ * @param node Node to serialize.
+ * @param depth Current nesting depth, used to indent each level by two spaces.
+ */
 void printAst(std::ostream &out, const AstNode &node, int depth) {
   const std::string indent(depth * 2, ' ');
   out << indent << "{\"kind\": ";

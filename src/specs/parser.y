@@ -1,6 +1,7 @@
 %{
 #include <cstdio>
 #include "ast.h"
+#include "diagnostic.h"
 
 extern int yylex();
 void yyerror(const char *message);
@@ -20,16 +21,25 @@ void resetLexer();
 }
 
 %code {
-static AstNode *node(const char *kind, const YYLTYPE &location,
-                     std::string value = "",
-                     std::initializer_list<AstNode *> children = {}) {
-    auto result = new AstNode{kind, std::move(value), location.first_line,
-                              location.first_column, {}};
-    for (auto child : children) {
-        result->children.emplace_back(child);
+    /**
+    * Creates an AST node with source location, optional value, and child nodes.
+    *
+    * @param kind Node classification stored in the AST.
+    * @param location Source location associated with the node.
+    * @param value Optional textual value for the node.
+    * @param children Child nodes transferred to the created node.
+    * @return A newly allocated AST node.
+    */
+    static AstNode *node(const char *kind, const YYLTYPE &location,
+                         std::string value = "",
+                         std::initializer_list<AstNode *> children = {}) {
+        auto result = new AstNode{kind, std::move(value), location.first_line,
+                                  location.first_column, {}};
+        for (auto child : children) {
+            result->children.emplace_back(child);
+        }
+        return result;
     }
-    return result;
-}
 }
 
 %locations
@@ -44,14 +54,15 @@ static AstNode *node(const char *kind, const YYLTYPE &location,
     const char *keyword;
 }
 
-%token <text> TOK_IDENTIFIER "identifier"
-%token <text> TOK_NUMBER "integer literal"
-%token TOK_BEGIN "begin" TOK_END "end"
-%token TOK_INT "int" TOK_BOOL "bool"
-%token TOK_TRUE "true" TOK_FALSE "false"
-%token TOK_IF "if" TOK_THEN "then" TOK_ELSE "else"
-%token TOK_DO "do" TOK_WHILE "while" TOK_FOR "for" TOK_PRINT "print"
-%token TOK_EQUAL_EQUAL "==" TOK_GREATER_EQUAL ">="
+%token <text> IDENTIFIER "identifier"
+%token <text> CONSTANT "integer literal"
+%token BEGIN "begin" END "end"
+%token INT "int" BOOL "bool"
+%token TRUE "true" FALSE "false"
+%token IF "if" THEN "then" ELSE "else"
+%token DO "do" WHILE "while" FOR "for" PRINT "print"
+%token EQ_OP "==" NE_OP "!=" LE_OP "<=" GE_OP ">="
+%token AND_OP "&&" OR_OP "||"
 
 %type <node> program statements statement block declaration assignment
 %type <node> if_statement do_statement for_statement for_init
@@ -62,14 +73,14 @@ static AstNode *node(const char *kind, const YYLTYPE &location,
 %%
 
 program
-    : TOK_BEGIN statements TOK_END {
+    : BEGIN statements END {
         $2->kind = "Program";
         $2->line = @1.first_line;
         $2->column = @1.first_column;
         astRoot.reset($2);
         $$ = nullptr;
       }
-    | TOK_BEGIN statements error TOK_END {
+    | BEGIN statements error END {
         delete $2;
         $$ = nullptr;
         yyerrok;
@@ -87,7 +98,7 @@ statement
     | if_statement { $$ = $1; }
     | do_statement { $$ = $1; }
     | for_statement { $$ = $1; }
-    | TOK_PRINT '(' expression ')' terminator { $$ = node("Print", @1, "", {$3}); }
+    | PRINT '(' expression ')' terminator { $$ = node("Print", @1, "", {$3}); }
     // Synchronize at a statement terminator to report subsequent errors.
     | error ';' { $$ = node("Error", @1); yyerrok; }
     ;
@@ -114,43 +125,43 @@ block
     ;
 
 declaration
-    : type TOK_IDENTIFIER {
+    : type IDENTIFIER {
         $$ = node("Declaration", @1, $1, {node("Identifier", @2, std::move(*$2))});
         delete $2;
       }
-    | type TOK_IDENTIFIER '=' expression {
+    | type IDENTIFIER '=' expression {
         $$ = node("Declaration", @1, $1, {node("Identifier", @2, std::move(*$2)), $4});
         delete $2;
       }
     ;
 
 type
-    : TOK_INT { $$ = "int"; }
-    | TOK_BOOL { $$ = "bool"; }
+    : INT { $$ = "int"; }
+    | BOOL { $$ = "bool"; }
     ;
 
 assignment
-    : TOK_IDENTIFIER '=' expression {
+    : IDENTIFIER '=' expression {
         $$ = node("Assignment", @1, "", {node("Identifier", @1, std::move(*$1)), $3});
         delete $1;
       }
     ;
 
 if_statement
-    : TOK_IF '(' expression ')' TOK_THEN block { $$ = node("If", @1, "", {$3, $6}); }
-    | TOK_IF '(' expression ')' TOK_THEN block TOK_ELSE block {
+    : IF '(' expression ')' THEN block { $$ = node("If", @1, "", {$3, $6}); }
+    | IF '(' expression ')' THEN block ELSE block {
         $$ = node("If", @1, "", {$3, $6, $8});
       }
     ;
 
 do_statement
-    : TOK_DO block TOK_WHILE '(' expression ')' terminator {
+    : DO block WHILE '(' expression ')' terminator {
         $$ = node("DoWhile", @1, "", {$2, $5});
       }
     ;
 
 for_statement
-    : TOK_FOR '(' for_init ';' expression ';' assignment ')' block {
+    : FOR '(' for_init ';' expression ';' assignment ')' block {
         $$ = node("For", @1, "", {$3, $5, $7, $9});
       }
     ;
@@ -167,8 +178,8 @@ expression
 
 comparison
     : '>' { $$ = ">"; }
-    | TOK_GREATER_EQUAL { $$ = ">="; }
-    | TOK_EQUAL_EQUAL { $$ = "=="; }
+    | GE_OP { $$ = ">="; }
+    | EQ_OP { $$ = "=="; }
     ;
 
 sum
@@ -182,17 +193,21 @@ product
     ;
 
 primary
-    : TOK_IDENTIFIER { $$ = node("Identifier", @1, std::move(*$1)); delete $1; }
-    | TOK_NUMBER { $$ = node("Integer", @1, std::move(*$1)); delete $1; }
-    | TOK_TRUE { $$ = node("Boolean", @1, "true"); }
-    | TOK_FALSE { $$ = node("Boolean", @1, "false"); }
+    : IDENTIFIER { $$ = node("Identifier", @1, std::move(*$1)); delete $1; }
+    | CONSTANT { $$ = node("Integer", @1, std::move(*$1)); delete $1; }
+    | TRUE { $$ = node("Boolean", @1, "true"); }
+    | FALSE { $$ = node("Boolean", @1, "false"); }
     | '(' expression ')' { $$ = $2; }
     ;
 
 %%
 
+/**
+ * Records and reports a syntax error emitted by the parser.
+ *
+ * @param message Description of the syntax error.
+ */
 void yyerror(const char *message) {
     ++syntaxErrors;
-    std::fprintf(stderr, "Syntax error at line %d, column %d: %s\n",
-                 yylloc.first_line, yylloc.first_column, message);
+    diagEmit(yylloc.first_line, yylloc.first_column, message);
 }

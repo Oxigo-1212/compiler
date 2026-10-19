@@ -1,6 +1,9 @@
-# Xmake cache
+# Legacy build output
 .xmake/
 build/
+
+# Cargo build output
+target/
 
 # MacOS Cache
 .DS_Store

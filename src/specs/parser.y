@@ -1,46 +1,43 @@
-%{
-#include <cstdio>
-#include "ast.h"
-
-extern int yylex();
-void yyerror(const char *message);
-int syntaxErrors = 0;
-std::unique_ptr<AstNode> astRoot;
-%}
-
 %code requires {
-#include "ast.h"
+#include "bridge.h"
 }
 
 %code provides {
-extern int syntaxErrors;
-extern int lexicalErrors;
-extern std::unique_ptr<AstNode> astRoot;
-void resetLexer();
+int yylex(YYSTYPE *value, YYLTYPE *location, void *scanner);
+void yyerror(YYLTYPE *location, void *scanner, struct ParseContext *context, const char *message);
 }
 
 %code {
-static AstNode *node(const char *kind, const YYLTYPE &location,
-                     std::string value = "",
-                     std::initializer_list<AstNode *> children = {}) {
-    auto result = new AstNode{kind, std::move(value), location.first_line,
-                              location.first_column, {}};
-    for (auto child : children) {
-        result->children.emplace_back(child);
+#include <stdarg.h>
+#include <stdlib.h>
+
+static struct AstNode *node(const char *kind, YYLTYPE location, const char *value) {
+    return upl_node(kind, value, location.first_line, location.first_column);
+}
+
+static struct AstNode *children(struct AstNode *parent, int count, ...) {
+    va_list list;
+    va_start(list, count);
+    for (int i = 0; i < count; ++i) {
+        upl_append(parent, va_arg(list, struct AstNode *));
     }
-    return result;
+    va_end(list);
+    return parent;
 }
 }
 
 %locations
+%define api.pure full
+%parse-param {void *scanner} {struct ParseContext *context}
+%lex-param {void *scanner}
 %define parse.error detailed
 %define parse.lac full
 %expect 0
 %start program
 
 %union {
-    AstNode *node;
-    std::string *text;
+    struct AstNode *node;
+    char *text;
     const char *keyword;
 }
 
@@ -57,28 +54,26 @@ static AstNode *node(const char *kind, const YYLTYPE &location,
 %type <node> if_statement do_statement for_statement for_init
 %type <node> expression sum product primary
 %type <keyword> type comparison
-%destructor { delete $$; } <node> <text>
+%destructor { upl_free($$); } <node>
+%destructor { free($$); } <text>
 
 %%
 
 program
     : TOK_BEGIN statements TOK_END {
-        $2->kind = "Program";
-        $2->line = @1.first_line;
-        $2->column = @1.first_column;
-        astRoot.reset($2);
-        $$ = nullptr;
+        upl_program(context, $2, @1.first_line, @1.first_column);
+        $$ = NULL;
       }
     | TOK_BEGIN statements error TOK_END {
-        delete $2;
-        $$ = nullptr;
+        upl_free($2);
+        $$ = NULL;
         yyerrok;
       }
     ;
 
 statements
-    : %empty { $$ = node("Block", @$); }
-    | statements statement { $1->children.emplace_back($2); $$ = $1; }
+    : %empty { $$ = node("Block", @$, ""); }
+    | statements statement { upl_append($1, $2); $$ = $1; }
     ;
 
 statement
@@ -87,40 +82,38 @@ statement
     | if_statement { $$ = $1; }
     | do_statement { $$ = $1; }
     | for_statement { $$ = $1; }
-    | TOK_PRINT '(' expression ')' terminator { $$ = node("Print", @1, "", {$3}); }
+    | TOK_PRINT '(' expression ')' terminator { $$ = children(node("Print", @1, ""), 1, $3); }
     // Synchronize at a statement terminator to report subsequent errors.
-    | error ';' { $$ = node("Error", @1); yyerrok; }
+    | error ';' { $$ = node("Error", @1, ""); yyerrok; }
     ;
 
 terminator
     : ';'
     // Report a missing semicolon at the next boundary without discarding it.
-    | %empty { yyerror("expected ';' after statement"); }
+    | %empty { yyerror(&yylloc, scanner, context, "expected ';' after statement"); }
     ;
 
 block
     : '{' statements '}' {
         $$ = $2;
-        $$->line = @1.first_line;
-        $$->column = @1.first_column;
+        upl_locate($$, @1.first_line, @1.first_column);
       }
     | '{' statements error '}' {
         $$ = $2;
-        $$->line = @1.first_line;
-        $$->column = @1.first_column;
-        $$->children.emplace_back(node("Error", @3));
+        upl_locate($$, @1.first_line, @1.first_column);
+        upl_append($$, node("Error", @3, ""));
         yyerrok;
       }
     ;
 
 declaration
     : type TOK_IDENTIFIER {
-        $$ = node("Declaration", @1, $1, {node("Identifier", @2, std::move(*$2))});
-        delete $2;
+        $$ = children(node("Declaration", @1, $1), 1, node("Identifier", @2, $2));
+        free($2);
       }
     | type TOK_IDENTIFIER '=' expression {
-        $$ = node("Declaration", @1, $1, {node("Identifier", @2, std::move(*$2)), $4});
-        delete $2;
+        $$ = children(node("Declaration", @1, $1), 2, node("Identifier", @2, $2), $4);
+        free($2);
       }
     ;
 
@@ -131,27 +124,27 @@ type
 
 assignment
     : TOK_IDENTIFIER '=' expression {
-        $$ = node("Assignment", @1, "", {node("Identifier", @1, std::move(*$1)), $3});
-        delete $1;
+        $$ = children(node("Assignment", @1, ""), 2, node("Identifier", @1, $1), $3);
+        free($1);
       }
     ;
 
 if_statement
-    : TOK_IF '(' expression ')' TOK_THEN block { $$ = node("If", @1, "", {$3, $6}); }
+    : TOK_IF '(' expression ')' TOK_THEN block { $$ = children(node("If", @1, ""), 2, $3, $6); }
     | TOK_IF '(' expression ')' TOK_THEN block TOK_ELSE block {
-        $$ = node("If", @1, "", {$3, $6, $8});
+        $$ = children(node("If", @1, ""), 3, $3, $6, $8);
       }
     ;
 
 do_statement
     : TOK_DO block TOK_WHILE '(' expression ')' terminator {
-        $$ = node("DoWhile", @1, "", {$2, $5});
+        $$ = children(node("DoWhile", @1, ""), 2, $2, $5);
       }
     ;
 
 for_statement
     : TOK_FOR '(' for_init ';' expression ';' assignment ')' block {
-        $$ = node("For", @1, "", {$3, $5, $7, $9});
+        $$ = children(node("For", @1, ""), 4, $3, $5, $7, $9);
       }
     ;
 
@@ -162,7 +155,7 @@ for_init
 
 expression
     : sum { $$ = $1; }
-    | sum comparison sum { $$ = node("Binary", @2, $2, {$1, $3}); }
+    | sum comparison sum { $$ = children(node("Binary", @2, $2), 2, $1, $3); }
     ;
 
 comparison
@@ -173,17 +166,17 @@ comparison
 
 sum
     : product { $$ = $1; }
-    | sum '+' product { $$ = node("Binary", @2, "+", {$1, $3}); }
+    | sum '+' product { $$ = children(node("Binary", @2, "+"), 2, $1, $3); }
     ;
 
 product
     : primary { $$ = $1; }
-    | product '*' primary { $$ = node("Binary", @2, "*", {$1, $3}); }
+    | product '*' primary { $$ = children(node("Binary", @2, "*"), 2, $1, $3); }
     ;
 
 primary
-    : TOK_IDENTIFIER { $$ = node("Identifier", @1, std::move(*$1)); delete $1; }
-    | TOK_NUMBER { $$ = node("Integer", @1, std::move(*$1)); delete $1; }
+    : TOK_IDENTIFIER { $$ = node("Identifier", @1, $1); free($1); }
+    | TOK_NUMBER { $$ = node("Integer", @1, $1); free($1); }
     | TOK_TRUE { $$ = node("Boolean", @1, "true"); }
     | TOK_FALSE { $$ = node("Boolean", @1, "false"); }
     | '(' expression ')' { $$ = $2; }
@@ -191,8 +184,7 @@ primary
 
 %%
 
-void yyerror(const char *message) {
-    ++syntaxErrors;
-    std::fprintf(stderr, "Syntax error at line %d, column %d: %s\n",
-                 yylloc.first_line, yylloc.first_column, message);
+void yyerror(YYLTYPE *location, void *scanner, struct ParseContext *context, const char *message) {
+    (void)scanner;
+    upl_diagnostic(context, 0, location->first_line, location->first_column, message, NULL);
 }

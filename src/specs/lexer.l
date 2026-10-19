@@ -1,43 +1,34 @@
-%option noyywrap
+%option noyywrap reentrant bison-bridge bison-locations noinput nounput
+%option extra-type="struct LexerState *"
 
 %{
-#include <cstdio>
-#include <string>
-#include "parser.hpp"
+#include "parser.h"
 
-int lexicalErrors = 0;
-static int sourceLine = 1;
-static int sourceColumn = 1;
-static bool afterCarriageReturn = false;
-static YYLTYPE commentStart;
-
-static void locateToken() {
-    yylloc.first_line = sourceLine;
-    yylloc.first_column = sourceColumn;
-    for (int i = 0; i < yyleng; ++i) {
-        yylloc.last_line = sourceLine;
-        yylloc.last_column = sourceColumn;
-        if (yytext[i] == '\r') {
-            ++sourceLine;
-            sourceColumn = 1;
-        } else if (yytext[i] == '\n') {
-            if (!afterCarriageReturn) ++sourceLine;
-            sourceColumn = 1;
+static void locateToken(YYLTYPE *location, const char *text, int length, struct LexerState *state) {
+    location->first_line = state->line;
+    location->first_column = state->column;
+    for (int i = 0; i < length; ++i) {
+        location->last_line = state->line;
+        location->last_column = state->column;
+        if (text[i] == '\r') {
+            ++state->line;
+            state->column = 1;
+        } else if (text[i] == '\n') {
+            if (!state->after_carriage_return) ++state->line;
+            state->column = 1;
         } else {
-            ++sourceColumn;
+            ++state->column;
         }
-        afterCarriageReturn = yytext[i] == '\r';
+        state->after_carriage_return = text[i] == '\r';
     }
 }
 
-static int lexicalError(const char *message) {
-    ++lexicalErrors;
-    std::fprintf(stderr, "Lexical error at line %d, column %d: %s\n",
-                 yylloc.first_line, yylloc.first_column, message);
+static int lexicalError(struct LexerState *state, YYLTYPE *location, const char *message, const char *text) {
+    upl_diagnostic(state->context, 1, location->first_line, location->first_column, message, text);
     return YYerror; // The diagnostic is already emitted; let Bison recover.
 }
 
-#define YY_USER_ACTION locateToken();
+#define YY_USER_ACTION locateToken(yylloc, yytext, yyleng, yyextra);
 %}
 
 DIGIT       [0-9]
@@ -51,17 +42,20 @@ IDENTIFIER  {LETTER}+{DIGIT}*
 [ \t\r\n]+                    ;
 
 "//"[^\r\n]*                   ;
-"/*"                           { commentStart = yylloc; BEGIN(BLOCK_COMMENT); }
+"/*"                           { yyextra->comment_line = yylloc->first_line;
+                                 yyextra->comment_column = yylloc->first_column;
+                                 BEGIN(BLOCK_COMMENT); }
 <BLOCK_COMMENT>"*/"           { BEGIN(INITIAL); }
 <BLOCK_COMMENT>\n             ;
 <BLOCK_COMMENT>.              ;
 <BLOCK_COMMENT><<EOF>>        {
                                    BEGIN(INITIAL);
-                                   yylloc = commentStart;
-                                   return lexicalError("unterminated block comment");
+                                   yylloc->first_line = yyextra->comment_line;
+                                   yylloc->first_column = yyextra->comment_column;
+                                   return lexicalError(yyextra, yylloc, "unterminated block comment", NULL);
                                }
 <INITIAL><<EOF>>               {
-                                   yylloc = {sourceLine, sourceColumn, sourceLine, sourceColumn};
+                                   *yylloc = (YYLTYPE){yyextra->line, yyextra->column, yyextra->line, yyextra->column};
                                    return 0;
                                }
 
@@ -80,17 +74,21 @@ IDENTIFIER  {LETTER}+{DIGIT}*
 "print"                        { return TOK_PRINT; }
 
 {IDENTIFIER}                   {
-                                   yylval.text = new std::string(yytext, yyleng);
+                                   yylval->text = malloc((size_t)yyleng + 1);
+                                   if (!yylval->text) YY_FATAL_ERROR("out of memory copying token");
+                                   memcpy(yylval->text, yytext, (size_t)yyleng + 1);
                                    return TOK_IDENTIFIER;
                                }
 
 {DIGIT}+                       {
-                                   yylval.text = new std::string(yytext, yyleng);
+                                   yylval->text = malloc((size_t)yyleng + 1);
+                                   if (!yylval->text) YY_FATAL_ERROR("out of memory copying token");
+                                   memcpy(yylval->text, yytext, (size_t)yyleng + 1);
                                    return TOK_NUMBER;
                                }
 
 [a-zA-Z0-9_]+                  {
-                                   return lexicalError(("invalid identifier '" + std::string(yytext) + "'").c_str());
+                                   return lexicalError(yyextra, yylloc, "invalid identifier", yytext);
                                }
 
 "=="                           { return TOK_EQUAL_EQUAL; }
@@ -107,15 +105,7 @@ IDENTIFIER  {LETTER}+{DIGIT}*
 ";"                            { return ';'; }
 
 .                              {
-                                   return lexicalError(("unexpected character '" + std::string(yytext) + "'").c_str());
+                                   return lexicalError(yyextra, yylloc, "unexpected character", yytext);
                                }
 
 %%
-
-void resetLexer() {
-    sourceLine = 1;
-    sourceColumn = 1;
-    afterCarriageReturn = false;
-    lexicalErrors = 0;
-    BEGIN(INITIAL);
-}

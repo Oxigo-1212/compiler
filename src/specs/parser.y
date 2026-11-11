@@ -1,213 +1,99 @@
-%{
-#include <cstdio>
-#include "ast.h"
-#include "diagnostic.h"
-
-extern int yylex();
-void yyerror(const char *message);
-int syntaxErrors = 0;
-std::unique_ptr<AstNode> astRoot;
-%}
-
-%code requires {
-#include "ast.h"
-}
-
-%code provides {
-extern int syntaxErrors;
-extern int lexicalErrors;
-extern std::unique_ptr<AstNode> astRoot;
-void resetLexer();
-}
-
-%code {
-    /**
-    * Creates an AST node with source location, optional value, and child nodes.
-    *
-    * @param kind Node classification stored in the AST.
-    * @param location Source location associated with the node.
-    * @param value Optional textual value for the node.
-    * @param children Child nodes transferred to the created node.
-    * @return A newly allocated AST node.
-    */
-    static AstNode *node(const char *kind, const YYLTYPE &location,
-                         std::string value = "",
-                         std::initializer_list<AstNode *> children = {}) {
-        auto result = new AstNode{kind, std::move(value), location.first_line,
-                                  location.first_column, {}};
-        for (auto child : children) {
-            result->children.emplace_back(child);
-        }
-        return result;
-    }
-}
-
-%locations
-%define parse.error detailed
-%define parse.lac full
-%expect 0
-%start program
-
-%union {
-    AstNode *node;
-    std::string *text;
-    const char *keyword;
-}
-
-%token <text> IDENTIFIER "identifier"
-%token <text> CONSTANT "integer literal"
-%token BEGIN "begin" END "end"
-%token INT "int" BOOL "bool"
-%token TRUE "true" FALSE "false"
-%token IF "if" THEN "then" ELSE "else"
-%token DO "do" WHILE "while" FOR "for" PRINT "print"
-%token EQ_OP "==" NE_OP "!=" LE_OP "<=" GE_OP ">="
-%token AND_OP "&&" OR_OP "||"
-
-%type <node> program statements statement block declaration assignment
-%type <node> if_statement do_statement for_statement for_init
-%type <node> expression sum product primary
-%type <keyword> type comparison
-%destructor { delete $$; } <node> <text>
-
+%grmtools{yacckind: Original(NoAction)}
+%start Program
+// @doc: expr-precedence
+%left '||'
+%left '&&'
+%nonassoc '==' '!=' '<' '<=' '>' '>='
+%left '+' '-'
+%left '*' '/' '%'
 %%
+Program: ItemList;
 
-program
-    : BEGIN statements END {
-        $2->kind = "Program";
-        $2->line = @1.first_line;
-        $2->column = @1.first_column;
-        astRoot.reset($2);
-        $$ = nullptr;
-      }
-    | BEGIN statements error END {
-        delete $2;
-        $$ = nullptr;
-        yyerrok;
-      }
-    ;
+// @doc: items
+// ---- items ----
+ItemList: ItemList Item | Item;
+Item: Function | Struct | Impl | Use | Mod | Let;
 
-statements
-    : %empty { $$ = node("Block", @$); }
-    | statements statement { $1->children.emplace_back($2); $$ = $1; }
-    ;
+// @doc: function
+Function: 'fn' 'ID' '(' Params ')' Block
+        | 'fn' 'ID' '(' Params ')' '->' Type Block;
+// @doc: method-self
+// `self` may only be the first parameter; a function without it is static.
+Params: | ParamList | ParamList ','
+      | 'self' | 'self' ',' | 'self' ',' ParamList | 'self' ',' ParamList ',';
+ParamList: Param | ParamList ',' Param;
+Param: 'ID' ':' Type;
 
-statement
-    : declaration terminator { $$ = $1; }
-    | assignment terminator { $$ = $1; }
-    | if_statement { $$ = $1; }
-    | do_statement { $$ = $1; }
-    | for_statement { $$ = $1; }
-    | PRINT '(' expression ')' terminator { $$ = node("Print", @1, "", {$3}); }
-    // Synchronize at a statement terminator to report subsequent errors.
-    | error ';' { $$ = node("Error", @1); yyerrok; }
-    ;
+// @doc: struct
+Struct: 'struct' 'ID' '{' StructFields '}'
+      | 'struct' 'ID' '{' StructFields ',' '}'
+      | 'struct' 'ID' '{' '}';
+StructFields: StructFields ',' 'ID' ':' Type | 'ID' ':' Type;
 
-terminator
-    : ';'
-    // Report a missing semicolon at the next boundary without discarding it.
-    | %empty { yyerror("expected ';' after statement"); }
-    ;
+// @doc: impl-use-mod
+Impl: 'impl' 'ID' '{' Functions '}';
+Functions: | Functions Function;
 
-block
-    : '{' statements '}' {
-        $$ = $2;
-        $$->line = @1.first_line;
-        $$->column = @1.first_column;
-      }
-    | '{' statements error '}' {
-        $$ = $2;
-        $$->line = @1.first_line;
-        $$->column = @1.first_column;
-        $$->children.emplace_back(node("Error", @3));
-        yyerrok;
-      }
-    ;
+Use: 'use' Path ';';
+Mod: 'mod' 'ID' ';' | 'mod' 'ID' '{' ItemList '}' | 'mod' 'ID' '{' '}';
 
-declaration
-    : type IDENTIFIER {
-        $$ = node("Declaration", @1, $1, {node("Identifier", @2, std::move(*$2))});
-        delete $2;
-      }
-    | type IDENTIFIER '=' expression {
-        $$ = node("Declaration", @1, $1, {node("Identifier", @2, std::move(*$2)), $4});
-        delete $2;
-      }
-    ;
+// @doc: type
+Type: 'int' | 'bool' | 'str' | 'ID' | '[' Type ',' 'INTEGER' ']';
 
-type
-    : INT { $$ = "int"; }
-    | BOOL { $$ = "bool"; }
-    ;
+// ---- statements ----
+// @doc: let
+Let: 'let' 'ID' ':' Type '=' Expr ';'
+   | 'let' 'mut' 'ID' ':' Type '=' Expr ';';
 
-assignment
-    : IDENTIFIER '=' expression {
-        $$ = node("Assignment", @1, "", {node("Identifier", @1, std::move(*$1)), $3});
-        delete $1;
-      }
-    ;
+// @doc: block
+// A block ends with an optional value expression (no ';').
+Block: '{' Stmts '}' | '{' Stmts SimpleOperation '}';
+Stmts: | Stmts Stmt;
+Stmt: Let | SimpleOperation ';' | BlockLike | LoopStmt | ';';
 
-if_statement
-    : IF '(' expression ')' THEN block { $$ = node("If", @1, "", {$3, $6}); }
-    | IF '(' expression ')' THEN block ELSE block {
-        $$ = node("If", @1, "", {$3, $6, $8});
-      }
-    ;
+// ---- expressions ----
+// @doc: block-like
+// BlockLike expressions need no ';' as statements and are never operands,
+// which keeps `if a {} -x` from being ambiguous. 
+Expr: BlockLike | SimpleOperation;
+BlockLike: If | Block;
+// @doc: if
+If: 'if' Expr Block
+  | 'if' Expr Block 'else' Block
+  | 'if' Expr Block 'else' If;
+// @doc: loop-stmt
+// Loops and loop jumps are statements: they produce no value.
+LoopStmt: While | Loop | For | 'break' ';' | 'continue' ';';
+While: 'while' Expr Block;
+Loop: 'loop' Block;
+For: 'for' 'ID' 'in' Expr Block;
 
-do_statement
-    : DO block WHILE '(' expression ')' terminator {
-        $$ = node("DoWhile", @1, "", {$2, $5});
-      }
-    ;
+// @doc: simple-op
+SimpleOperation: BinaryOperation
+      | BinaryOperation '=' Expr
+      | BinaryOperation '..' BinaryOperation
+      | 'return' | 'return' BinaryOperation;
 
-for_statement
-    : FOR '(' for_init ';' expression ';' assignment ')' block {
-        $$ = node("For", @1, "", {$3, $5, $7, $9});
-      }
-    ;
-
-for_init
-    : declaration { $$ = $1; }
-    | assignment { $$ = $1; }
-    ;
-
-expression
-    : sum { $$ = $1; }
-    | sum comparison sum { $$ = node("Binary", @2, $2, {$1, $3}); }
-    ;
-
-comparison
-    : '>' { $$ = ">"; }
-    | GE_OP { $$ = ">="; }
-    | EQ_OP { $$ = "=="; }
-    ;
-
-sum
-    : product { $$ = $1; }
-    | sum '+' product { $$ = node("Binary", @2, "+", {$1, $3}); }
-    ;
-
-product
-    : primary { $$ = $1; }
-    | product '*' primary { $$ = node("Binary", @2, "*", {$1, $3}); }
-    ;
-
-primary
-    : IDENTIFIER { $$ = node("Identifier", @1, std::move(*$1)); delete $1; }
-    | CONSTANT { $$ = node("Integer", @1, std::move(*$1)); delete $1; }
-    | TRUE { $$ = node("Boolean", @1, "true"); }
-    | FALSE { $$ = node("Boolean", @1, "false"); }
-    | '(' expression ')' { $$ = $2; }
-    ;
-
+// @doc: expr-precedence
+BinaryOperation: BinaryOperation '||' BinaryOperation | BinaryOperation '&&' BinaryOperation
+      | BinaryOperation '==' BinaryOperation | BinaryOperation '!=' BinaryOperation
+      | BinaryOperation '<' BinaryOperation | BinaryOperation '<=' BinaryOperation
+      | BinaryOperation '>' BinaryOperation | BinaryOperation '>=' BinaryOperation
+      | BinaryOperation '+' BinaryOperation | BinaryOperation '-' BinaryOperation
+      | BinaryOperation '*' BinaryOperation | BinaryOperation '/' BinaryOperation | BinaryOperation '%' BinaryOperation
+      | UnaryOperation;
+// @doc: postfix-primary
+UnaryOperation: '-' UnaryOperation | '!' UnaryOperation | Postfix;
+Postfix: Postfix '(' Args ')' | Postfix '.' 'ID' | Postfix '[' Expr ']' | Primary;
+// @doc: array-literal
+// `[]` is forbidden: an array literal has at least one element.
+Primary: Path | 'INTEGER' | 'STRING' | 'true' | 'false' | 'self' | '(' Expr ')'
+       | '.' '{' FieldInits '}' | '.' '{' FieldInits ',' '}' | '.' '{' '}'
+       | '[' ArgList ']' | '[' ArgList ',' ']';
+// @doc: struct-literal
+FieldInits: FieldInit | FieldInits ',' FieldInit;
+FieldInit: 'ID' ':' Expr;
+Path: 'ID' | Path '::' 'ID';
+Args: | ArgList | ArgList ',';
+ArgList: Expr | ArgList ',' Expr;
 %%
-
-/**
- * Records and reports a syntax error emitted by the parser.
- *
- * @param message Description of the syntax error.
- */
-void yyerror(const char *message) {
-    ++syntaxErrors;
-    diagEmit(yylloc.first_line, yylloc.first_column, message);
-}

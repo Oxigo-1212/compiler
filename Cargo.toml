@@ -1,0 +1,15 @@
+[package]
+name = "compiler"
+version = "0.1.0"
+edition = "2024"
+build = "src/build.rs"
+
+[build-dependencies]
+cfgrammar = "0.15"
+lrlex = "0.15"
+lrpar = "0.15"
+
+[dependencies]
+cfgrammar = "0.15"
+lrlex = "0.15"
+lrpar = "0.15"

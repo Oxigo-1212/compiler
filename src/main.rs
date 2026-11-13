@@ -1,3 +1,4 @@
+mod ast;
 use std::io::Read;
 
 use lrlex::{lrlex_mod, DefaultLexeme, LexerDef};
@@ -28,7 +29,7 @@ fn main() {
     }
 
     let lexer = lexerdef.lexer(&input);
-    let errs = parser_y::parse(&lexer);
+    let (_result, errs) = parser_y::parse(&lexer);
     for e in &errs {
         eprintln!("{}", e.pp(&lexer, &parser_y::token_epp));
     }

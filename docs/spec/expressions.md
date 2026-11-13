@@ -66,13 +66,69 @@ Source: `@doc: postfix-primary` in `src/specs/parser.y`
 
 ### Definition
 
-Unary `-` and `!` apply to a postfix expression. Postfix forms chain left to right: call `f(args)`, field `.ID`, index `[Expr]`, as in `a::b(i)[0].c`. Primary is a path `a::b`, an integer, a string (`STRING`, see [lex-string](lexer.md#lex-string)), `true`, `false`, `self`, `( Expr )`, or a literal ([struct-literal](expressions.md#struct-literal), [array-literal](expressions.md#array-literal)). Arguments allow a trailing comma.
+These rules are the bottom of the expression chain. Each level is built from the one to its right:
+
+```text
+SimpleOperation → BinaryOperation → UnaryOperation → Postfix → Primary
+   (= .. return)    (+ * < && ...)       (- !)       (call . [])  (atoms)
+     loosest                                                      tightest
+```
+
+**Operator positions.** An operator can come before its operand (prefix: `-x`, `!b`, rule `UnaryOperation`), between two operands (infix: `a + b`, rule `BinaryOperation`), or after its operand (postfix: rule `Postfix`).
+
+**Postfix** has three forms, applied after a value:
+
+| Form | Alternative | Example |
+|:---|:---|:---|
+| Call | `Postfix '(' Args ')'` | `f(1, 2)` |
+| Field | `Postfix '.' 'ID'` | `p.x` |
+| Index | `Postfix '[' Expr ']'` | `a[0]` |
+
+The rule is left-recursive, so postfix forms chain left to right, each applying to the result so far. `a::b(i)[0].c` is the path `a::b`, called with `i`, indexed with `0`, then field `c`:
+
+```text
+Field .c
+  └─ Index [0]
+       └─ Call (i)
+            └─ Path a::b
+```
+
+Postfix binds tightest of all operators: `-a.b` is `-(a.b)`, and `x + f(y)` is `x + (f(y))`. A method call `p.get()` has no rule of its own: it is a field access followed by a call.
+
+**Primary** holds the atoms: complete values that need no operator.
+
+| Group | Alternatives | Example |
+|:---|:---|:---|
+| Names | `Path`, `'self'` | `x`, `a::b`, `self` |
+| Literals | `'INTEGER'`, `'STRING'`, `'true'`, `'false'` | `42`, `"hi"` ([lex-string](lexer.md#lex-string)), `true` |
+| Grouping | `'(' Expr ')'` | `(a + b)` |
+| Struct literals | `'.' '{' FieldInits '}'` and variants | `.{ x: 3 }` ([struct-literal](expressions.md#struct-literal)) |
+| Array literals | `'[' ElementList ']'` and variants | `[1, 2, 3]` ([array-literal](expressions.md#array-literal)) |
+
+`( Expr )` turns any expression back into an atom, which is how parentheses override precedence: in `(a + b) * c`, `(a + b)` is one primary. The parentheses leave no AST node; the action passes the inner value up. Call arguments (`Args`) allow a trailing comma and may be empty.
+
+**What a primary carries into the AST.** Each alternative holds only what is written at that spot in the source, minus punctuation:
+
+| Alternative | Source | Data |
+|:---|:---|:---|
+| `'INTEGER'` | `42` | the value |
+| `'STRING'` | `"hi"` | the text |
+| `'true'`, `'false'` | `true` | the boolean |
+| `'self'` | `self` | nothing: only "self appears here" |
+
+A literal carries no name. In `let x: int = 42;` the name `x` belongs to the `Let` node, and the literal `42` holds only its value; the same literal could appear in `f(42)` or `[42]` with no name at all:
+
+```text
+Let { name: "x", ty: Int32, value: Int(42) }
+```
+
+`self` carries no data because the parser cannot know which object it refers to (that depends on the call, `p.get()` vs `q.get()`, at run time). A later pass checks that `self` is inside a method and gives it that `impl`'s struct type. Position (where a literal is, for error messages) is a span, like `Path`'s span: location, not a name.
 
 ### Intention
 
-Not yet reviewed.
+Placing literals and names at the bottom lets them appear anywhere an expression can (`[1, 2][0]`, `.{ x: 3 }.x`). Whether a plain variable `x` becomes a one-segment `Path` or a separate `Var` node in the AST is not decided yet. Other choices: not yet reviewed.
 
-Since: 2026-11-11
+Since: 2026-11-11 (explanation added 2026-11-13)
 
 ## struct-literal
 
@@ -98,6 +154,6 @@ Source: `@doc: array-literal` in `src/specs/parser.y`
 
 ### Intention
 
-Rust-style literal, chosen by the learner. Empty `[]` is forbidden in the grammar (learner decision). The type `[int, 0]` is invalid; zero-length collections will use a vector type, planned (learner decision). The grammar still accepts `[int, 0]`; the type checker must reject it.
+Rust-style literal, chosen by the learner. Elements use their own `ElementList` rule rather than sharing `ArgList` with calls: the grammar should read by meaning (learner decision). Empty `[]` is forbidden in the grammar (learner decision). The type `[int, 0]` is invalid; zero-length collections will use a vector type, planned (learner decision). The grammar still accepts `[int, 0]`; the type checker must reject it.
 
 Since: 2026-11-11

@@ -29,5 +29,19 @@ pub enum Literal {
 }
 pub enum Expr {
     Lit(Literal),
-    SelfValue
+    SelfValue,
+    Path(Path)
+}
+
+pub struct FieldInit {
+    name: String,
+    value: Expr,
+    pos: Span
+}
+
+
+impl FieldInit {
+    pub fn new(lexeme: String, span: Span, expr: Expr) -> Self {
+        FieldInit { name: lexeme, value: expr, pos: span  }
+    }
 }

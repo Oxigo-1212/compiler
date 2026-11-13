@@ -8,6 +8,8 @@ grep -rn "@doc: <tag>" src/
 
 Each entry has a **Definition** (what the code accepts or does) and an **Intention** (why). "Not yet reviewed" means no design reason has been recorded yet. Update only the entries you changed in a session.
 
+Theory: [ast.md](ast.md) explains what the AST is (structure without notation, before meaning), with the example `a + b * c`.
+
 | Tag | File |
 |:---|:---|
 | [lex-skip](lexer.md#lex-skip) | `lexer.md` |

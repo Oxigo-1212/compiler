@@ -126,7 +126,7 @@ Let { name: "x", ty: Int32, value: Int(42) }
 
 ### Intention
 
-Placing literals and names at the bottom lets them appear anywhere an expression can (`[1, 2][0]`, `.{ x: 3 }.x`). Whether a plain variable `x` becomes a one-segment `Path` or a separate `Var` node in the AST is not decided yet. Other choices: not yet reviewed.
+Placing literals and names at the bottom lets them appear anywhere an expression can (`[1, 2][0]`, `.{ x: 3 }.x`). Every name, including a plain variable `x`, is stored as `Expr::Path`: the parser has no scopes, so it cannot know whether a name is a variable, function or type; name resolution decides that later (learner decision, like rustc). Other choices: not yet reviewed.
 
 Since: 2026-11-11 (explanation added 2026-11-13)
 

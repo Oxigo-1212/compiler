@@ -33,12 +33,16 @@ Path -> Result<Path , ()>:
 		Ok(p)
 		};
 // @doc: struct-literal
-FieldInits -> ():
-      FieldInit { }
-    | FieldInits ',' FieldInit { }
+FieldInits -> Result<Vec<FieldInit>, ()>:
+      FieldInit {  Ok(vec![$1?])  }
+    | FieldInits ',' FieldInit {
+																let mut vf = $1?; 
+																vf.push($3?);
+																Ok(vf)
+															 }
     ;
-FieldInit -> ():
-      'ID' ':' Expr { }
+FieldInit -> Result<FieldInit, ()>:
+      'ID' ':' Expr { Ok(FieldInit::new(convert_lexeme($lexer, $1)?, $span, $3?)) }
     ;
 ArgList -> ():
       Expr { }
@@ -58,13 +62,13 @@ ElementList -> ():
     ;
 
 Primary -> Result<Expr, ()>:
-      Path { Err(()) }  // TODO: Var vs one-segment Path not decided
+      Path { Ok(Expr::Path($1?)) }  // every name is a Path; name resolution decides what it means
     | 'INTEGER' { Ok(Expr::Lit(Literal::Int(convert_number($lexer, $1)?))) }
-    | 'STRING' { Err(()) }  // TODO: keep or strip quotes, decode escapes
+    | 'STRING' { Ok(Expr::Lit(Literal::Str(unescape(convert_lexeme($lexer, $1)?)?)))}  
     | 'true' { Ok(Expr::Lit(Literal::Bool(true))) }
     | 'false' { Ok(Expr::Lit(Literal::Bool(false))) }
     | 'self' { Ok(Expr::SelfValue) }
-    | '(' Expr ')' { Err(()) }  // TODO: return $2 once Expr returns Expr
+    | '(' Expr ')' { $2 }
     | '.' '{' FieldInits '}' { Err(()) }
     | '.' '{' FieldInits ',' '}' { Err(()) }
     | '.' '{' '}' { Err(()) }
@@ -74,60 +78,60 @@ Primary -> Result<Expr, ()>:
 
 // ---- operators ----
 // @doc: postfix-primary
-Postfix -> ():
-      Postfix '(' Args ')' { }
-    | Postfix '.' 'ID' { }
-    | Postfix '[' Expr ']' { }
-    | Primary { }
+Postfix -> Result<Expr, ()>:
+      Postfix '(' Args ')' { Err(()) }  // TODO: Call
+    | Postfix '.' 'ID' { Err(()) }  // TODO: Field
+    | Postfix '[' Expr ']' { Err(()) }  // TODO: Index
+    | Primary { $1 }
     ;
-UnaryOperation -> ():
-      '-' UnaryOperation { }
-    | '!' UnaryOperation { }
-    | Postfix { }
+UnaryOperation -> Result<Expr, ()>:
+      '-' UnaryOperation { Err(()) }  // TODO: Unary
+    | '!' UnaryOperation { Err(()) }  // TODO: Unary
+    | Postfix { $1 }
     ;
 // @doc: expr-precedence
-BinaryOperation -> ():
-      BinaryOperation '||' BinaryOperation { }
-    | BinaryOperation '&&' BinaryOperation { }
-    | BinaryOperation '==' BinaryOperation { }
-    | BinaryOperation '!=' BinaryOperation { }
-    | BinaryOperation '<' BinaryOperation { }
-    | BinaryOperation '<=' BinaryOperation { }
-    | BinaryOperation '>' BinaryOperation { }
-    | BinaryOperation '>=' BinaryOperation { }
-    | BinaryOperation '+' BinaryOperation { }
-    | BinaryOperation '-' BinaryOperation { }
-    | BinaryOperation '*' BinaryOperation { }
-    | BinaryOperation '/' BinaryOperation { }
-    | BinaryOperation '%' BinaryOperation { }
-    | UnaryOperation { }
+BinaryOperation -> Result<Expr, ()>:
+      BinaryOperation '||' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '&&' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '==' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '!=' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '<' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '<=' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '>' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '>=' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '+' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '-' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '*' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '/' BinaryOperation { Err(()) }  // TODO: Binary
+    | BinaryOperation '%' BinaryOperation { Err(()) }  // TODO: Binary
+    | UnaryOperation { $1 }
     ;
 // @doc: simple-op
-SimpleOperation -> ():
-      BinaryOperation { }
-    | BinaryOperation '=' Expr { }
-    | BinaryOperation '..' BinaryOperation { }
-    | 'return' { }
-    | 'return' BinaryOperation { }
+SimpleOperation -> Result<Expr, ()>:
+      BinaryOperation { $1 }
+    | BinaryOperation '=' Expr { Err(()) }  // TODO: Assign
+    | BinaryOperation '..' BinaryOperation { Err(()) }  // TODO: Range
+    | 'return' { Err(()) }  // TODO: Return
+    | 'return' BinaryOperation { Err(()) }  // TODO: Return
     ;
 
 // ---- expressions ----
 // @doc: if
-If -> ():
-      'if' Expr Block { }
-    | 'if' Expr Block 'else' Block { }
-    | 'if' Expr Block 'else' If { }
+If -> Result<Expr, ()>:
+      'if' Expr Block { Err(()) }  // TODO: If
+    | 'if' Expr Block 'else' Block { Err(()) }  // TODO: If
+    | 'if' Expr Block 'else' If { Err(()) }  // TODO: If
     ;
 // @doc: block-like
 // BlockLike expressions need no ';' as statements and are never operands,
 // which keeps `if a {} -x` from being ambiguous.
-BlockLike -> ():
-      If { }
-    | Block { }
+BlockLike -> Result<Expr, ()>:
+      If { $1 }
+    | Block { $1 }
     ;
-Expr -> ():
-      BlockLike { }
-    | SimpleOperation { }
+Expr -> Result<Expr, ()>:
+      BlockLike { $1 }
+    | SimpleOperation { $1 }
     ;
 
 // ---- statements ----
@@ -167,9 +171,9 @@ Stmts -> ():
       /* empty */ { }
     | Stmts Stmt { }
     ;
-Block -> ():
-      '{' Stmts '}' { }
-    | '{' Stmts SimpleOperation '}' { }
+Block -> Result<Expr, ()>:
+      '{' Stmts '}' { Err(()) }  // TODO: Block
+    | '{' Stmts SimpleOperation '}' { Err(()) }  // TODO: Block
     ;
 
 // ---- items ----
@@ -241,7 +245,7 @@ Program -> ():
       ItemList { }
     ;
 %%
-use crate::ast::{Type, Path, Expr, Literal};
+use crate::ast::{Type, Path, Expr, Literal, FieldInit};
 use lrlex::{DefaultLexeme, DefaultLexerTypes};
 use lrpar::NonStreamingLexer; // Lexeme is already imported by the generated parser
 
@@ -253,4 +257,37 @@ fn convert_lexeme(lexer: &dyn NonStreamingLexer<DefaultLexerTypes>, //interface
 fn convert_number(lexer: &dyn NonStreamingLexer<DefaultLexerTypes>,
 									tok: Result<DefaultLexeme, DefaultLexeme>) -> Result<u64, ()>{
 							convert_lexeme(lexer, tok)?.parse::<u64>().map_err(|_| ())
+}
+// Turns a STRING token's text into its value: drops the surrounding quotes and
+// translates escapes. Contract: Literal::Str always holds this decoded text.
+fn unescape(raw: String) -> Result<String, ()> {
+    let inner = &raw[1..raw.len() - 1];   // drop the surrounding quotes
+    let mut out = String::new();
+    let mut chars = inner.chars();
+
+    while let Some(c) = chars.next() {
+        if c == BACKSLASH {
+            let escaped = chars.next().ok_or(())?;   // the char after the backslash
+            out.push(translate_escape(escaped)?);
+        } else {
+            out.push(c);
+        }
+    }
+    Ok(out)
+}
+
+const BACKSLASH: char = '\\';   // Rust writes one backslash as '\\'
+
+// `\n` → newline, `\t` → tab, `\\` → backslash, `\"` → quote. Anything else is an error.
+fn translate_escape(c: char) -> Result<char, ()> {
+    match c {
+        'n' => Ok('\n'),
+        't' => Ok('\t'),
+        '\\' => Ok('\\'),
+        '"' => Ok('"'),
+        other => {
+            eprintln!("unknown escape \\{other}");
+            Err(())
+        }
+    }
 }

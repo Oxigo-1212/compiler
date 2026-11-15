@@ -44,21 +44,29 @@ FieldInits -> Result<Vec<FieldInit>, ()>:
 FieldInit -> Result<FieldInit, ()>:
       'ID' ':' Expr { Ok(FieldInit::new(convert_lexeme($lexer, $1)?, $span, $3?)) }
     ;
-ArgList -> ():
-      Expr { }
-    | ArgList ',' Expr { }
+ArgList -> Result<Vec<Expr>, ()>:
+      Expr { Ok(vec![$1?]) }
+    | ArgList ',' Expr { 
+													let mut vec_expr = $1?;
+													vec_expr.push($3?);
+													Ok(vec_expr)
+											 }
     ;
-Args -> ():
-      /* empty */ { }
-    | ArgList { }
-    | ArgList ',' { }
+Args -> Result<Vec<Expr>, ()>:
+      /* empty */ { Ok(vec![]) }
+    | ArgList { Ok($1?) }
+    | ArgList ',' { Ok($1?) }
     ;
 // `[]` is forbidden: an array literal has at least one element.
 // @doc: array-literal
 // Array elements; separate from ArgList (call arguments) by meaning.
-ElementList -> ():
-      Expr { }
-    | ElementList ',' Expr { }
+ElementList -> Result<Vec<Expr>, ()>:
+      Expr { Ok(vec![$1?]) }
+    | ElementList ',' Expr {
+															let mut array = $1?;
+															array.push($3?);
+															Ok(array)
+													 }
     ;
 
 Primary -> Result<Expr, ()>:
@@ -69,58 +77,57 @@ Primary -> Result<Expr, ()>:
     | 'false' { Ok(Expr::Lit(Literal::Bool(false))) }
     | 'self' { Ok(Expr::SelfValue) }
     | '(' Expr ')' { $2 }
-    | '.' '{' FieldInits '}' { Err(()) }
-    | '.' '{' FieldInits ',' '}' { Err(()) }
-    | '.' '{' '}' { Err(()) }
-    | '[' ElementList ']' { Err(()) }
-    | '[' ElementList ',' ']' { Err(()) }
+    | '.' '{' FieldInits '}' { Ok(Expr::FieldInits($3?)) }
+    | '.' '{' FieldInits ',' '}' { Ok(Expr::FieldInits($3?)) }
+    | '.' '{' '}' { Ok(Expr::FieldInits(vec![])) }
+    | '[' ElementList ']' { Ok(Expr::Array($2?)) }
+    | '[' ElementList ',' ']' { Ok(Expr::Array($2?)) }
     ;
 
 // ---- operators ----
 // @doc: postfix-primary
 Postfix -> Result<Expr, ()>:
-      Postfix '(' Args ')' { Err(()) }  // TODO: Call
-    | Postfix '.' 'ID' { Err(()) }  // TODO: Field
-    | Postfix '[' Expr ']' { Err(()) }  // TODO: Index
+      Postfix '(' Args ')' { Ok(Expr::Call(Box::new($1?), $3?)) }
+    | Postfix '.' 'ID' { Ok(Expr::Field(Box::new($1?), convert_lexeme($lexer, $3)?)) }
+    | Postfix '[' Expr ']' { Ok(Expr::Index(Box::new($1?), Box::new($3?))) }
     | Primary { $1 }
     ;
 UnaryOperation -> Result<Expr, ()>:
-      '-' UnaryOperation { Err(()) }  // TODO: Unary
-    | '!' UnaryOperation { Err(()) }  // TODO: Unary
+      '-' UnaryOperation { Ok(Expr::Unary(UnOp::Neg, Box::new($2?))) }
+    | '!' UnaryOperation { Ok(Expr::Unary(UnOp::Not, Box::new($2?))) }
     | Postfix { $1 }
     ;
 // @doc: expr-precedence
 BinaryOperation -> Result<Expr, ()>:
-      BinaryOperation '||' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '&&' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '==' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '!=' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '<' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '<=' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '>' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '>=' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '+' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '-' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '*' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '/' BinaryOperation { Err(()) }  // TODO: Binary
-    | BinaryOperation '%' BinaryOperation { Err(()) }  // TODO: Binary
+      BinaryOperation '||' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Or, Box::new($3?))) }
+    | BinaryOperation '&&' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::And, Box::new($3?))) }
+    | BinaryOperation '==' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Eq, Box::new($3?))) }
+    | BinaryOperation '!=' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Ne, Box::new($3?))) }
+    | BinaryOperation '<' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Lt, Box::new($3?))) }
+    | BinaryOperation '<=' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Le, Box::new($3?))) }
+    | BinaryOperation '>' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Gt, Box::new($3?))) }
+    | BinaryOperation '>=' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Ge, Box::new($3?))) }
+    | BinaryOperation '+' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Add, Box::new($3?))) }
+    | BinaryOperation '-' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Sub, Box::new($3?))) }
+    | BinaryOperation '*' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Mul, Box::new($3?))) }
+    | BinaryOperation '/' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Div, Box::new($3?))) }
+    | BinaryOperation '%' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Rem, Box::new($3?))) }
     | UnaryOperation { $1 }
     ;
 // @doc: simple-op
 SimpleOperation -> Result<Expr, ()>:
       BinaryOperation { $1 }
-    | BinaryOperation '=' Expr { Err(()) }  // TODO: Assign
-    | BinaryOperation '..' BinaryOperation { Err(()) }  // TODO: Range
-    | 'return' { Err(()) }  // TODO: Return
-    | 'return' BinaryOperation { Err(()) }  // TODO: Return
+    | BinaryOperation '..' BinaryOperation { Ok(Expr::Range(Box::new($1?), Box::new($3?)))}
+    | 'return' { Ok(Expr::Return(None)) }
+    | 'return' BinaryOperation { Ok(Expr::Return(Some(Box::new($2?)))) }
     ;
 
 // ---- expressions ----
 // @doc: if
 If -> Result<Expr, ()>:
-      'if' Expr Block { Err(()) }  // TODO: If
-    | 'if' Expr Block 'else' Block { Err(()) }  // TODO: If
-    | 'if' Expr Block 'else' If { Err(()) }  // TODO: If
+      'if' Expr Block { Ok(Expr::If(Box::new($2?), Box::new($3?), None)) }
+    | 'if' Expr Block 'else' Block { Ok(Expr::If(Box::new($2?), Box::new($3?), Some(Box::new($5?)))) }
+    | 'if' Expr Block 'else' If { Ok(Expr::If(Box::new($2?), Box::new($3?), Some(Box::new($5?)))) }
     ;
 // @doc: block-like
 // BlockLike expressions need no ';' as statements and are never operands,
@@ -136,44 +143,77 @@ Expr -> Result<Expr, ()>:
 
 // ---- statements ----
 // @doc: let
-Let -> ():
-      'let' 'ID' ':' Type '=' Expr ';' { }
-    | 'let' 'mut' 'ID' ':' Type '=' Expr ';' { }
+Let -> Result<Stmt, ()>:
+      'let' 'ID' ':' Type '=' Expr ';' { Ok(Stmt::Declaration(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not)) }
+    | 'let' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Stmt::Declaration(convert_lexeme($lexer, $3)?, $5?, $7?, Mut::Mut)) }
     ;
 // @doc: loop-stmt
 // Loops and loop jumps are statements: they produce no value.
-While -> ():
-      'while' Expr Block { }
+While -> Result<Stmt, ()>:
+      'while' Expr Block { Ok(Stmt::While(Box::new($2?), Box::new($3?))) }
     ;
-Loop -> ():
-      'loop' Block { }
+Loop -> Result<Stmt, ()>:
+      'loop' Block { Ok(Stmt::Loop(Box::new($2?))) }
     ;
-For -> ():
-      'for' 'ID' 'in' Expr Block { }
+For -> Result<Stmt, ()>:
+      'for' 'ID' 'in' Expr Block { Ok(Stmt::For(convert_lexeme($lexer, $2)?, Box::new($4?), Box::new($5?))) }
     ;
-LoopStmt -> ():
-      While { }
-    | Loop { }
-    | For { }
-    | 'break' ';' { }
-    | 'continue' ';' { }
+LoopStmt -> Result<Stmt, ()>:
+      While { $1 }
+    | Loop { $1 }
+    | For { $1 }
+    | 'break' ';' { Ok(Stmt::Break) }
+    | 'continue' ';' { Ok(Stmt::Continue) }
+    ;
+// @doc: assign
+// Assignment is a statement, not an expression: `a = b = 1` is a syntax error.
+// Go-style lists: `a, b = b, a`. Counts are checked later, not here.
+Targets -> Result<Vec<Expr>, ()>:
+      Postfix { Ok(vec![$1?]) }
+    | Targets ',' Postfix {
+                            let mut targets = $1?;
+                            targets.push($3?);
+                            Ok(targets)
+                          }
+    ;
+Values -> Result<Vec<Expr>, ()>:
+      Expr { Ok(vec![$1?]) }
+    | Values ',' Expr {
+                        let mut values = $1?;
+                        values.push($3?);
+                        Ok(values)
+                      }
     ;
 // @doc: block
 // A block ends with an optional value expression (no ';').
-Stmt -> ():
-      Let { }
-    | SimpleOperation ';' { }
-    | BlockLike { }
-    | LoopStmt { }
-    | ';' { }
+Stmt -> Result<Stmt, ()>:
+      Let { $1 }
+    | SimpleOperation ';' { Ok(Stmt::Semi($1?)) }
+    | BlockLike { Ok(Stmt::Expr($1?)) }
+    | LoopStmt { $1 }
+    | Targets '=' Values ';' { Err(()) }  // TODO: Assign node
+    | ';' { Ok(Stmt::Empty) }
     ;
-Stmts -> ():
-      /* empty */ { }
-    | Stmts Stmt { }
+Stmts -> Result<Vec<Stmt>, ()>:
+      /* empty */ { Ok(vec![]) }
+    | Stmts Stmt {
+                   let mut stmts = $1?;
+                   stmts.push($2?);
+                   Ok(stmts)
+                 }
     ;
 Block -> Result<Expr, ()>:
-      '{' Stmts '}' { Err(()) }  // TODO: Block
-    | '{' Stmts SimpleOperation '}' { Err(()) }  // TODO: Block
+      '{' Stmts '}' {
+                      // A trailing block-like without `;` (Stmt::Expr) is the block's value.
+                      let mut stmts = $2?;
+                      let tail = match stmts.pop() {
+                          Some(Stmt::Expr(e)) => Some(Box::new(e)),
+                          Some(other) => { stmts.push(other); None }
+                          None => None,
+                      };
+                      Ok(Expr::Block(stmts, tail))
+                    }
+    | '{' Stmts SimpleOperation '}' { Ok(Expr::Block($2?, Some(Box::new($3?)))) }
     ;
 
 // ---- items ----
@@ -245,7 +285,7 @@ Program -> ():
       ItemList { }
     ;
 %%
-use crate::ast::{Type, Path, Expr, Literal, FieldInit};
+use crate::ast::{Type, Path, Expr, Literal, FieldInit, UnOp, BinOp, Stmt, Mut};
 use lrlex::{DefaultLexeme, DefaultLexerTypes};
 use lrpar::NonStreamingLexer; // Lexeme is already imported by the generated parser
 

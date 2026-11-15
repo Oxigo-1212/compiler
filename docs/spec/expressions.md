@@ -36,7 +36,7 @@ Source: `@doc: simple-op` in `src/specs/parser.y`
 
 ### Definition
 
-Expressions that are not block-like: a binary expression, assignment `a = e` (right-associative, so `a = b = 1`), range `a .. b` (does not chain), `return` with optional value. `break` and `continue` are statements, see [loop-stmt](statements.md#loop-stmt).
+Expressions that are not block-like: a binary expression, range `a .. b` (does not chain), `return` with optional value. `break`, `continue` and assignment are statements, see [loop-stmt](statements.md#loop-stmt) and [assign](statements.md#assign).
 
 ### Intention
 
@@ -138,9 +138,11 @@ Source: `@doc: struct-literal` in `src/specs/parser.y`
 
 `.{ ID: Expr, ... }` creates a struct value, for example `let p: P = .{ x: 3, y: true };`. A trailing comma is allowed. `.{ }` is the value of a struct with no fields. The literal names no type: its type comes from context (a `let` annotation, parameter or return type), which the type checker must supply.
 
+**AST.** `Expr::FieldInits(Vec<FieldInit>)`; each `FieldInit` always has a name, a value and a span. `.{ }` is an empty `Vec`: "no fields" lives in the container, never as an empty element, so no field of `FieldInit` is optional. The trailing comma leaves no trace, so `.{ x: 3 }` and `.{ x: 3, }` give the same node.
+
 ### Intention
 
-Field access (`p.x`) and calls (`P::new()`) need an existing value, so the language needs one built-in way to create one; constructors are built on top of it (learner decision). The leading `.` follows Zig: it doesn't clash with blocks or other syntax (`.{ }` vs `{ }`), and the learner found it the only plausible form for struct initialisation; fields use Rust style `x: 3`, matching struct declarations (learner decision).
+Field access (`p.x`) and calls (`P::new()`) need an existing value, so the language needs one built-in way to create one; constructors are built on top of it (learner decision). The leading `.` follows Zig: it doesn't clash with blocks or other syntax (`.{ }` vs `{ }`), and the learner found it the only plausible form for struct initialisation; fields use Rust style `x: 3`, matching struct declarations (learner decision). Empty structs kept after the learner questioned them (2026-11-14); in Rust they serve as namespaces, marker types and trait carriers, the last two need traits or generics.
 
 Since: 2026-11-11
 
@@ -152,8 +154,12 @@ Source: `@doc: array-literal` in `src/specs/parser.y`
 
 `[Expr, ...]` creates an array value, for example `let a: [int, 3] = [1, 2, 3];`. At least one element; trailing comma allowed. `[]` is a syntax error. Matching the element count to the type is left to the type checker.
 
+**AST.** `Expr::Array(Vec<Expr>)`. `ElementList` only collects elements (`Result<Vec<Expr>, ()>`); `Primary` wraps them in `Expr::Array`. The rule is left-recursive and each step pushes to the end, so the vector keeps source order, and each element is a full `Expr` tree (`[a + 1, [2, 3]]` nests). No size is stored; the element count is the vector's length.
+
+**Trailing comma.** `[1, 2,]` gives the same node as `[1, 2]`. It is for convenience, not error detection: every line of a multi-line list has the same shape, so edits and diffs touch one line. `[,]` and `[1,,2]` remain syntax errors.
+
 ### Intention
 
-Rust-style literal, chosen by the learner. Elements use their own `ElementList` rule rather than sharing `ArgList` with calls: the grammar should read by meaning (learner decision). Empty `[]` is forbidden in the grammar (learner decision). The type `[int, 0]` is invalid; zero-length collections will use a vector type, planned (learner decision). The grammar still accepts `[int, 0]`; the type checker must reject it.
+Rust-style literal, chosen by the learner. Elements use their own `ElementList` rule rather than sharing `ArgList` with calls: the grammar should read by meaning (learner decision). Empty `[]` is forbidden in the grammar (learner decision). The type `[int, 0]` is invalid; zero-length collections will use a vector type, planned (learner decision). The grammar still accepts `[int, 0]`; the type checker must reject it. Not storing the size in the node: learner choice, reason not yet reviewed.
 
 Since: 2026-11-11

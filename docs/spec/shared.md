@@ -34,6 +34,28 @@ A trailing `if` (as in `{ if b { 1 } else { 2 } }`) parses as a statement, not a
 
 `{ }` is a block, replacing `begin ... end`; its value is the last line without `;` (learner decision, from `if` being an expression).
 
+### AST representation (2026-11-15)
+
+Implemented. A block is a list of statements plus a separate **tail**: the final expression with no `;`, which is the block's value.
+
+```rust
+Expr::Block(Vec<Stmt>, Option<Box<Expr>>)   // statements, tail (None: no value)
+```
+
+The tail is a separate field, not the last list item, so the parser answers "what is this block's value?" once and every later pass reads the field (learner decision, over rustc's one-list form). `{ }` has an empty list and no tail. A block's scope is not stored: name resolution opens a scope when it enters a `Block` node.
+
+An expression in the list is wrapped in a statement variant (an *expression statement*), because a `Vec` holds one type. Two variants record whether a `;` followed, as in rustc (learner decision):
+
+| Source | Variant | Value |
+|---|---|---|
+| `f();` | `Stmt::Semi(e)` | Discarded |
+| `if a { g(); }`, `{ ... }` (block-like, no `;`) | `Stmt::Expr(e)` | Discarded in the middle; at the end, moved into the tail |
+| Final `SimpleOperation` (`{ x = 1; 0 }`) | — | Becomes the tail directly |
+
+The block action builds the tail: for `{ Stmts SimpleOperation }` the tail is the `SimpleOperation`; for `{ Stmts }` a last `Stmt::Expr` is moved into the tail, otherwise the tail is `None`. A `;` after a block-like parses as a separate empty statement, so `{ if a {1} else {2}; }` has no tail.
+
+`Stmt::Empty` represents a lone `;`. Assignment and loop statements return `Err(())` until their variants are designed. Open, for the type checker: whether a block-like in the middle of a block may have a value (Rust requires none).
+
 Since: 2026-11-11
 
 ## type

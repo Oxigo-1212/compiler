@@ -42,3 +42,10 @@ Prints any tag that is in the code but has no `## <tag>` heading, or the other w
 comm -3 <(grep -rhoE "@doc: [a-z-]+" src/ | cut -d' ' -f2 | sort -u) \
         <(grep -hE "^## [a-z-]+$" docs/spec/*.md | grep -v README | cut -d' ' -f2 | sort -u)
 ```
+
+The same check for the one-sentence summary in [`docs/grammar.md`](../grammar.md): prints any tag that has no `#<tag>` link there, or a link to a tag that does not exist.
+
+```sh
+comm -3 <(grep -rhoE "@doc: [a-z-]+" src/ | cut -d' ' -f2 | sort -u) \
+        <(grep -oE "\.md#[a-z-]+\)" docs/grammar.md | sed -E 's/.*#([a-z-]+)\)/\1/' | sort -u)
+```

@@ -125,16 +125,16 @@ SimpleOperation -> Result<Expr, ()>:
 // ---- expressions ----
 // @doc: if
 If -> Result<Expr, ()>:
-      'if' Expr Block { Ok(Expr::If(Box::new($2?), Box::new($3?), None)) }
-    | 'if' Expr Block 'else' Block { Ok(Expr::If(Box::new($2?), Box::new($3?), Some(Box::new($5?)))) }
-    | 'if' Expr Block 'else' If { Ok(Expr::If(Box::new($2?), Box::new($3?), Some(Box::new($5?)))) }
+      'if' Expr Block { Ok(Expr::If(Box::new($2?), Box::new(Expr::Block($3?)), None)) }
+    | 'if' Expr Block 'else' Block { Ok(Expr::If(Box::new($2?), Box::new(Expr::Block($3?)), Some(Box::new(Expr::Block($5?))))) }
+    | 'if' Expr Block 'else' If { Ok(Expr::If(Box::new($2?), Box::new(Expr::Block($3?)), Some(Box::new($5?)))) }
     ;
 // @doc: block-like
 // BlockLike expressions need no ';' as statements and are never operands,
 // which keeps `if a {} -x` from being ambiguous.
 BlockLike -> Result<Expr, ()>:
       If { $1 }
-    | Block { $1 }
+    | Block { Ok(Expr::Block($1?)) }
     ;
 Expr -> Result<Expr, ()>:
       BlockLike { $1 }
@@ -143,20 +143,20 @@ Expr -> Result<Expr, ()>:
 
 // ---- statements ----
 // @doc: let
-Let -> Result<Stmt, ()>:
-      'let' 'ID' ':' Type '=' Expr ';' { Ok(Stmt::Declaration(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not)) }
-    | 'let' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Stmt::Declaration(convert_lexeme($lexer, $3)?, $5?, $7?, Mut::Mut)) }
+Let -> Result<Let, ()>:
+      'let' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not)) }
+    | 'let' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $3)?, $5?, $7?, Mut::Mut)) }
     ;
 // @doc: loop-stmt
 // Loops and loop jumps are statements: they produce no value.
 While -> Result<Stmt, ()>:
-      'while' Expr Block { Ok(Stmt::While(Box::new($2?), Box::new($3?))) }
+      'while' Expr Block { Ok(Stmt::While(Box::new($2?), Box::new(Expr::Block($3?)))) }
     ;
 Loop -> Result<Stmt, ()>:
-      'loop' Block { Ok(Stmt::Loop(Box::new($2?))) }
+      'loop' Block { Ok(Stmt::Loop(Box::new(Expr::Block($2?)))) }
     ;
 For -> Result<Stmt, ()>:
-      'for' 'ID' 'in' Expr Block { Ok(Stmt::For(convert_lexeme($lexer, $2)?, Box::new($4?), Box::new($5?))) }
+      'for' 'ID' 'in' Expr Block { Ok(Stmt::For(convert_lexeme($lexer, $2)?, Box::new($4?), Box::new(Expr::Block($5?)))) }
     ;
 LoopStmt -> Result<Stmt, ()>:
       While { $1 }
@@ -187,11 +187,12 @@ Values -> Result<Vec<Expr>, ()>:
 // @doc: block
 // A block ends with an optional value expression (no ';').
 Stmt -> Result<Stmt, ()>:
-      Let { $1 }
+      Let { Ok(Stmt::Declaration($1?)) }
     | SimpleOperation ';' { Ok(Stmt::Semi($1?)) }
     | BlockLike { Ok(Stmt::Expr($1?)) }
     | LoopStmt { $1 }
-    | Targets '=' Values ';' { Err(()) }  // TODO: Assign node
+    | Function { Ok(Stmt::Item(ItemKind::Function($1?))) }  // nested fn: no access to outer locals
+    | Targets '=' Values ';' { Ok(Stmt::Assign($1?, $3?)) }
     | ';' { Ok(Stmt::Empty) }
     ;
 Stmts -> Result<Vec<Stmt>, ()>:
@@ -202,7 +203,7 @@ Stmts -> Result<Vec<Stmt>, ()>:
                    Ok(stmts)
                  }
     ;
-Block -> Result<Expr, ()>:
+Block -> Result<Block, ()>:
       '{' Stmts '}' {
                       // A trailing block-like without `;` (Stmt::Expr) is the block's value.
                       let mut stmts = $2?;
@@ -211,81 +212,102 @@ Block -> Result<Expr, ()>:
                           Some(other) => { stmts.push(other); None }
                           None => None,
                       };
-                      Ok(Expr::Block(stmts, tail))
+                      Ok(Block::new(stmts, tail))
                     }
-    | '{' Stmts SimpleOperation '}' { Ok(Expr::Block($2?, Some(Box::new($3?)))) }
+    | '{' Stmts SimpleOperation '}' { Ok(Block::new($2?, Some(Box::new($3?)))) }
     ;
 
 // ---- items ----
 // @doc: method-self
 // `self` may only be the first parameter; a function without it is static.
-Param -> ():
-      'ID' ':' Type { }
+Param -> Result<Parameter, ()>:
+      'ID' ':' Type { Ok(Parameter::new(convert_lexeme($lexer, $1)?, $3?)) }
     ;
-ParamList -> ():
-      Param { }
-    | ParamList ',' Param { }
+ParamList -> Result<Vec<Parameter>, ()>:
+      Param { Ok(vec![$1?]) }
+    | ParamList ',' Param {
+                            let mut params = $1?;
+                            params.push($3?);
+                            Ok(params)
+                          }
     ;
-Params -> ():
-      /* empty */ { }
-    | ParamList { }
-    | ParamList ',' { }
-    | 'self' { }
-    | 'self' ',' { }
-    | 'self' ',' ParamList { }
-    | 'self' ',' ParamList ',' { }
+Params -> Result<(SelfParam, Vec<Parameter>), ()>:
+      /* empty */ { Ok((SelfParam::Not, vec![])) }
+    | ParamList { Ok((SelfParam::Not, $1?)) }
+    | ParamList ',' { Ok((SelfParam::Not, $1?)) }
+    | 'self' { Ok((SelfParam::Value, vec![])) }
+    | 'self' ',' { Ok((SelfParam::Value, vec![])) }
+    | 'self' ',' ParamList { Ok((SelfParam::Value, $3?)) }
+    | 'self' ',' ParamList ',' { Ok((SelfParam::Value, $3?)) }
     ;
 // @doc: function
-Function -> ():
-      'fn' 'ID' '(' Params ')' Block { }
-    | 'fn' 'ID' '(' Params ')' '->' Type Block { }
+Function -> Result<Function, ()>:
+      'fn' 'ID' '(' Params ')' Block {
+                                       let (self_param, params) = $4?;
+                                       Ok(Function::new(convert_lexeme($lexer, $2)?, self_param, params, None, $6?))
+                                     }
+    | 'fn' 'ID' '(' Params ')' '->' Type Block {
+                                                 let (self_param, params) = $4?;
+                                                 Ok(Function::new(convert_lexeme($lexer, $2)?, self_param, params, Some($7?), $8?))
+                                               }
     ;
 // @doc: struct
-StructFields -> ():
-      StructFields ',' 'ID' ':' Type { }
-    | 'ID' ':' Type { }
+StructFields -> Result<Vec<Field>, ()>:
+      StructFields ',' 'ID' ':' Type {
+                                       let mut fields = $1?;
+                                       fields.push(Field::new(convert_lexeme($lexer, $3)?, $5?));
+                                       Ok(fields)
+                                     }
+    | 'ID' ':' Type { Ok(vec![Field::new(convert_lexeme($lexer, $1)?, $3?)]) }
     ;
-Struct -> ():
-      'struct' 'ID' '{' StructFields '}' { }
-    | 'struct' 'ID' '{' StructFields ',' '}' { }
-    | 'struct' 'ID' '{' '}' { }
+Struct -> Result<Struct, ()>:
+      'struct' 'ID' '{' StructFields '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, $4?)) }
+    | 'struct' 'ID' '{' StructFields ',' '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, $4?)) }
+    | 'struct' 'ID' '{' '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, vec![])) }
     ;
 // @doc: impl-use-mod
-Functions -> ():
-      /* empty */ { }
-    | Functions Function { }
+Functions -> Result<Vec<Function>, ()>:
+      /* empty */ { Ok(vec![]) }
+    | Functions Function {
+                           let mut methods = $1?;
+                           methods.push($2?);
+                           Ok(methods)
+                         }
     ;
-Impl -> ():
-      'impl' 'ID' '{' Functions '}' { }
+Impl -> Result<Impl, ()>:
+      'impl' 'ID' '{' Functions '}' { Ok(Impl::new(convert_lexeme($lexer, $2)?, $4?)) }
     ;
-Use -> ():
-      'use' Path ';' { }
+Use -> Result<Path, ()>:
+      'use' Path ';' { $2 }
     ;
-Mod -> ():
-      'mod' 'ID' ';' { }
-    | 'mod' 'ID' '{' ItemList '}' { }
-    | 'mod' 'ID' '{' '}' { }
+// No inline modules (`mod m { .. }`): a module's contents always live in another file.
+Mod -> Result<String, ()>:
+      'mod' 'ID' ';' { convert_lexeme($lexer, $2) }
     ;
 
 // ---- program ----
 // @doc: items
-Item -> ():
-      Function { }
-    | Struct { }
-    | Impl { }
-    | Use { }
-    | Mod { }
-    | Let { }
+Item -> Result<ItemKind, ()>:
+      Function { Ok(ItemKind::Function($1?)) }
+    | Struct { Ok(ItemKind::Struct($1?)) }
+    | Impl { Ok(ItemKind::Impl($1?)) }
+    | Use { Ok(ItemKind::Use($1?)) }
+    | Mod { Ok(ItemKind::Mod($1?)) }
+    | Let { Ok(ItemKind::Let($1?)) }
     ;
-ItemList -> ():
-      ItemList Item { }
-    | Item { }
+ItemList -> Result<Vec<ItemKind>, ()>:
+      ItemList Item {
+                      let mut items = $1?;
+                      items.push($2?);
+                      Ok(items)
+                    }
+    | Item { Ok(vec![$1?]) }
     ;
-Program -> ():
-      ItemList { }
+Program -> Result<Vec<ItemKind>, ()>:
+      ItemList { $1 }
     ;
 %%
-use crate::ast::{Type, Path, Expr, Literal, FieldInit, UnOp, BinOp, Stmt, Mut};
+use crate::ast::{Type, Path, Expr, Literal, FieldInit, UnOp, BinOp, Stmt, Mut, Block, ItemKind, SelfParam, Parameter, Function, Field, Struct, Impl, Let};
 use lrlex::{DefaultLexeme, DefaultLexerTypes};
 use lrpar::NonStreamingLexer; // Lexeme is already imported by the generated parser
 

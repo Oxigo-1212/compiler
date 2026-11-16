@@ -50,7 +50,7 @@ Source: `@doc: expr-precedence` in `src/specs/parser.y`
 
 ### Definition
 
-From lowest to highest: `=`, `..`, `||`, `&&`, comparisons `== != < <= > >=`, `+ -`, `* / %`, unary `- !`, postfix. The `%left`/`%nonassoc` lines set the binary levels; later lines bind tighter. Comparisons are `%nonassoc`, so `a < b < c` is a syntax error.
+From lowest to highest: `..`, `||`, `&&`, comparisons `== != < <= > >=`, `+ -`, `* / %`, unary `- !`, postfix. The `%left`/`%nonassoc` lines set the binary levels; later lines bind tighter. Comparisons are `%nonassoc`, so `a < b < c` is a syntax error.
 
 This tag marks two places: the precedence declarations at the top, and the `BinaryOperation` rule.
 

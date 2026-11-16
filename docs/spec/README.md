@@ -8,6 +8,8 @@ grep -rn "@doc: <tag>" src/
 
 Each entry has a **Definition** (what the code accepts or does) and an **Intention** (why). "Not yet reviewed" means no design reason has been recorded yet. Update only the entries you changed in a session.
 
+Error messages: [errors.md](errors.md) describes how lexer and parser errors are reported. It is the only spec file that documents code outside the grammar (`src/error.rs`).
+
 Theory: [ast.md](ast.md) explains what the AST is (structure without notation, before meaning), with the example `a + b * c`.
 
 | Tag | File |
@@ -33,6 +35,7 @@ Theory: [ast.md](ast.md) explains what the AST is (structure without notation, b
 | [let](shared.md#let) | `shared.md` |
 | [block](shared.md#block) | `shared.md` |
 | [type](shared.md#type) | `shared.md` |
+| [error-report](errors.md#error-report) | `errors.md` |
 
 ## Drift check
 
@@ -43,9 +46,9 @@ comm -3 <(grep -rhoE "@doc: [a-z-]+" src/ | cut -d' ' -f2 | sort -u) \
         <(grep -hE "^## [a-z-]+$" docs/spec/*.md | grep -v README | cut -d' ' -f2 | sort -u)
 ```
 
-The same check for the one-sentence summary in [`docs/grammar.md`](../grammar.md): prints any tag that has no `#<tag>` link there, or a link to a tag that does not exist.
+The same check for the one-sentence summary in [`docs/grammar.md`](../grammar.md): prints any grammar tag (from `src/specs/`) that has no `#<tag>` link there, or a link to a tag that does not exist.
 
 ```sh
-comm -3 <(grep -rhoE "@doc: [a-z-]+" src/ | cut -d' ' -f2 | sort -u) \
+comm -3 <(grep -rhoE "@doc: [a-z-]+" src/specs/ | cut -d' ' -f2 | sort -u) \
         <(grep -oE "\.md#[a-z-]+\)" docs/grammar.md | sed -E 's/.*#([a-z-]+)\)/\1/' | sort -u)
 ```

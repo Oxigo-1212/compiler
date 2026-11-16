@@ -29,13 +29,17 @@ fn main() {
     }
 
     let lexer = lexerdef.lexer(&input);
-    let (_result, errs) = parser_y::parse(&lexer);
+    let (result, errs) = parser_y::parse(&lexer);
     for e in &errs {
         eprintln!("{}", e.pp(&lexer, &parser_y::token_epp));
     }
-    if errs.is_empty() {
-        println!("ok");
-    } else {
-        std::process::exit(1);
+    match result {
+        Some(Ok(tree)) if errs.is_empty() => println!("{tree:#?}"),
+        Some(Err(())) => {
+            eprintln!("error: could not build AST");
+            std::process::exit(1);
+        }
+        // Syntax errors (already printed above), or the parser gave up (None).
+        _ => std::process::exit(1),
     }
 }

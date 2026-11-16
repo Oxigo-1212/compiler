@@ -1,4 +1,5 @@
 use lrpar::Span;
+#[derive(Debug)]
 pub enum Type {
     Int32,
     Bool,
@@ -7,6 +8,7 @@ pub enum Type {
     Array(Box<Type>, u64), // The box breaks the recursion of the type. Type can't contain itself.
     Void
 }
+#[derive(Debug)]
 pub struct Path {
     segments: Vec<String>,
     pos: Span
@@ -23,11 +25,13 @@ impl Path {
     
 }
 
+#[derive(Debug)]
 pub enum Literal {
     Int(u64),
     Bool(bool),
     Str(String),
 }
+#[derive(Debug)]
 pub enum Expr {
     Lit(Literal),
     SelfValue,
@@ -45,6 +49,7 @@ pub enum Expr {
     Block(Vec<Stmt>, Option<Box<Expr>>),          // statements, tail (None: block has no value)
 }
 
+#[derive(Debug)]
 pub enum BinOp {
     Or,  // ||
     And, // &&
@@ -61,12 +66,14 @@ pub enum BinOp {
     Rem, // %
 }
 
+#[derive(Debug)]
 pub enum UnOp {
     Neg, // -x
     Not, // !b
 }
 
 
+#[derive(Debug)]
 pub struct FieldInit {
     name: String,
     value: Expr,
@@ -80,6 +87,7 @@ impl FieldInit {
     }
 }
 
+#[derive(Debug)]
 pub enum Stmt {
     Declaration(String, Type, Expr, Mut), // name, type, value, mutability: let mut x: int = 1;
     While(Box<Expr>, Box<Expr>),          // condition, body: while c { }
@@ -90,6 +98,8 @@ pub enum Stmt {
     Semi(Expr),  // expression with `;`: f(); value discarded
     Expr(Expr),  // block-like without `;`: if a { } — becomes the tail if last
     Empty,       // lone `;`
+    Assign(Vec<Expr>, Vec<Expr>), // targets, values matched by index: a, b = b, a;
 }
 
+#[derive(Debug)]
 pub enum Mut { Not, Mut }

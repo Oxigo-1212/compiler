@@ -184,8 +184,7 @@ Values -> Result<Vec<Expr>, ()>:
                         Ok(values)
                       }
     ;
-// @doc: block
-// A block ends with an optional value expression (no ';').
+// @doc: stmt
 Stmt -> Result<Stmt, ()>:
       Let { Ok(Stmt::Declaration($1?)) }
     | SimpleOperation ';' { Ok(Stmt::Semi($1?)) }
@@ -203,6 +202,8 @@ Stmts -> Result<Vec<Stmt>, ()>:
                    Ok(stmts)
                  }
     ;
+// @doc: block
+// A block ends with an optional value expression (no ';').
 Block -> Result<Block, ()>:
       '{' Stmts '}' {
                       // A trailing block-like without `;` (Stmt::Expr) is the block's value.

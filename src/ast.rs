@@ -1,4 +1,5 @@
 use lrpar::Span;
+
 #[derive(Debug)]
 pub enum Type {
     Int32,
@@ -8,21 +9,11 @@ pub enum Type {
     Array(Box<Type>, u64), // The box breaks the recursion of the type. Type can't contain itself.
     Void
 }
+
 #[derive(Debug)]
 pub struct Path {
     segments: Vec<String>,
     pos: Span
-}
-
-impl Path {
-    pub fn new(lexeme: String, span: Span) -> Self {
-        Path { segments: vec![lexeme], pos: span }
-    }
-    pub fn add_path(&mut self, lexeme: String, span: Span) {
-        self.segments.push(lexeme);
-        self.pos = span;
-    }
-    
 }
 
 #[derive(Debug)]
@@ -31,6 +22,7 @@ pub enum Literal {
     Bool(bool),
     Str(String),
 }
+
 #[derive(Debug)]
 pub enum Expr {
     Lit(Literal),
@@ -72,19 +64,11 @@ pub enum UnOp {
     Not, // !b
 }
 
-
 #[derive(Debug)]
 pub struct FieldInit {
     name: String,
     value: Expr,
     pos: Span
-}
-
-
-impl FieldInit {
-    pub fn new(lexeme: String, span: Span, expr: Expr) -> Self {
-        FieldInit { name: lexeme, value: expr, pos: span  }
-    }
 }
 
 #[derive(Debug)]
@@ -96,7 +80,7 @@ pub enum Stmt {
     Break,                                // break;
     Continue,                             // continue;
     Semi(Expr),  // expression with `;`: f(); value discarded
-    Expr(Expr),  // block-like without `;`: if a { } — becomes the tail if last
+    Expr(Expr),  // nested block or `if` without `;`: { } / if a { } — becomes the tail if last
     Empty,       // lone `;`
     Item(ItemKind), // nested item: fn h() {} inside a block
     Assign(Vec<Expr>, Vec<Expr>), // targets, values matched by index: a, b = b, a;
@@ -108,24 +92,12 @@ pub struct Block {
     tail: Option<Box<Expr>>, // None: block has no value
 }
 
-impl Block {
-    pub fn new(stmts: Vec<Stmt>, tail: Option<Box<Expr>>) -> Self {
-        Block { stmts, tail }
-    }
-}
-
 #[derive(Debug)]
 pub struct Let {
     name: String,
     tpe: Type,
     value: Expr,
     mutability: Mut,
-}
-
-impl Let {
-    pub fn new(name: String, tpe: Type, value: Expr, mutability: Mut) -> Self {
-        Let { name, tpe, value, mutability }
-    }
 }
 
 #[derive(Debug)]
@@ -151,12 +123,6 @@ pub struct Parameter {
     return_type: Type,
 }
 
-impl Parameter {
-    pub fn new(name: String, return_type: Type) -> Self {
-        Parameter { name, return_type }
-    }
-}
-
 #[derive(Debug)]
 pub struct Function {
     name: String,
@@ -166,6 +132,58 @@ pub struct Function {
     body: Block,
 }
 
+#[derive(Debug)]
+pub struct Field {
+    id: String,
+    field_type: Type,
+}
+
+#[derive(Debug)]
+pub struct Struct {
+    field: Vec<Field>, // empty for `struct E {}`
+    id: String,
+}
+
+#[derive(Debug)]
+pub struct Impl {
+    methods: Vec<Function>,
+    id: String, // the type name; name resolution links it to its struct
+}
+
+impl Path {
+    pub fn new(lexeme: String, span: Span) -> Self {
+        Path { segments: vec![lexeme], pos: span }
+    }
+    pub fn add_path(&mut self, lexeme: String, span: Span) {
+        self.segments.push(lexeme);
+        self.pos = span;
+    }
+}
+
+impl FieldInit {
+    pub fn new(lexeme: String, span: Span, expr: Expr) -> Self {
+        FieldInit { name: lexeme, value: expr, pos: span  }
+    }
+}
+
+impl Block {
+    pub fn new(stmts: Vec<Stmt>, tail: Option<Box<Expr>>) -> Self {
+        Block { stmts, tail }
+    }
+}
+
+impl Let {
+    pub fn new(name: String, tpe: Type, value: Expr, mutability: Mut) -> Self {
+        Let { name, tpe, value, mutability }
+    }
+}
+
+impl Parameter {
+    pub fn new(name: String, return_type: Type) -> Self {
+        Parameter { name, return_type }
+    }
+}
+
 impl Function {
     pub fn new(name: String, self_param: SelfParam, parameters: Vec<Parameter>,
                return_type: Option<Type>, body: Block) -> Self {
@@ -173,33 +191,16 @@ impl Function {
     }
 }
 
-#[derive(Debug)]
-pub struct Field {
-    id: String,
-    field_type: Type,
-}
-
 impl Field {
     pub fn new(id: String, field_type: Type) -> Self {
         Field { id, field_type }
     }
-}
-#[derive(Debug)]
-pub struct Struct {
-    field: Vec<Field>, // empty for `struct E {}`
-    id: String,
 }
 
 impl Struct {
     pub fn new(id: String, field: Vec<Field>) -> Self {
         Struct { field, id }
     }
-}
-
-#[derive(Debug)]
-pub struct Impl {
-    methods: Vec<Function>,
-    id: String, // the type name; name resolution links it to its struct
 }
 
 impl Impl {

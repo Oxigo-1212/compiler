@@ -2,9 +2,13 @@
 %%
 // @doc: lex-skip
 // ignore expressions
-[ \t\r\n]+    ;
-\/\/[^\r\n]*  ;
-/\*(?s:.)*?\*/ ;
+// space, tab, line breaks.
+// the comment // until the end of the line.
+// /* comment */ this is what ignore.
+
+[ \t\r\n]+    ; 
+\/\/[^\r\n]*  ; 
+/\*(?s:.)*?\*/ ; 
 
 // @doc: lex-keywords
 // keywords (listed before ID so they win length ties)

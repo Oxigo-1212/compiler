@@ -17,7 +17,7 @@ The spec is ordered by the levels of the language, from tokens up to items. Each
 | 4. Items | [items.md](items.md) | Program, Function, Self parameter, Struct, Impl, Use and mod |
 | Types | [types.md](types.md) | Type |
 
-Theory: [ast.md](ast.md) explains what the AST is (structure without notation, before meaning), with the example `a + b * c`.
+Theory: [ast.md](ast.md) explains what the AST is (structure without notation, before meaning), with the example `a + b * c`. [sdt.md](sdt.md) explains how the grammar actions build the AST, and why that translation is S-attributed.
 
 ## Layout of a section
 

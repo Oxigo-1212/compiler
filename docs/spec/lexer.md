@@ -53,6 +53,7 @@ A keyword is a word that the language reserves for itself, so it cannot be used 
 ```text
 let mut fn int bool true false if else while loop for in
 return break continue struct impl use mod self str
+pub root export as const static
 ```
 
 Each keyword is its own token. The keyword rules come before the `ID` rule, so on a tie the keyword wins: `let` is a keyword, but `letter` is an `ID`, because `letter` is the longer match.

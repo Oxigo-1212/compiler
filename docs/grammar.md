@@ -7,7 +7,7 @@ One sentence per rule, from the whole program down to single tokens. Each link g
 The grammar has four levels. Each level contains the one below it.
 
 ```
-Item        fn, struct, impl, use, mod, let       (top level of a file)
+Item        fn, struct, impl, use, export, mod, let, const, static   (top level of a file)
   └─ Function body = Block
        └─ Stmt     let, expr;, if/block, loops, assign, nested fn, ;
             └─ Expr        BlockLike | SimpleOperation
@@ -33,7 +33,9 @@ The levels are recursive, not a strict ladder:
 - **Function** — `fn name(params) -> Type { body }` declares a function; the return type is optional, and a function may also be declared inside a block. [Function](spec/items.md#function)
 - **Self parameter** — A function whose first parameter is `self` is a method; without it the function is static. [Self parameter](spec/items.md#self-parameter)
 - **Struct** — `struct Name { field: Type, ... }` declares a struct type with zero or more typed fields. [Struct](spec/items.md#struct)
-- **Impl, use, mod** — `impl Name { fns }` adds methods to a type, `use a::b;` imports a name, and `mod m;` declares a module stored in another file. [Impl](spec/items.md#impl), [Use and mod](spec/items.md#use-and-mod)
+- **Visibility** — `pub` before a top-level item, a method or a field makes it public; without `pub` it is private to its module and the modules below it. A top-level `let` is never public. [Visibility](spec/items.md#visibility)
+- **Const and static** — `const X: T = v;` declares a module-level constant and `static [mut] X: T = v;` one program-wide location; both may be `pub`. [Const and static](spec/items.md#const-and-static)
+- **Impl, use, export, mod** — `impl Name { fns }` adds methods to a type, `use a::b;` imports a name, `export a::b;` re-exports it, `as` renames either, and `mod m;` declares a module stored in another file. [Impl](spec/items.md#impl), [Use, export and mod](spec/items.md#use-export-and-mod)
 
 ## Statements
 
@@ -57,7 +59,7 @@ The levels are recursive, not a strict ladder:
 
 ## Types
 
-- **Type** — A type is `int`, `bool`, `str`, a struct name, or a fixed-size array such as `[int, 3]`. [Type](spec/types.md#type)
+- **Type** — A type is `int`, `bool`, `str`, a struct name or path such as `root::geo::Point`, or a fixed-size array such as `[int, 3]`. [Type](spec/types.md#type)
 
 ## Tokens
 

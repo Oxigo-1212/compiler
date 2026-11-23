@@ -14,9 +14,7 @@
 Type -> Result<Type, ()>: 'int' { Ok(Type::Int32) }
 												| 'bool'{ Ok(Type::Bool) }
 												| 'str' { Ok(Type::Str) }
-												| 'ID'  { 
-																	Ok(Type::Name(convert_lexeme($lexer, $1)?))
-																}
+												| Path { Ok(Type::Name($1?)) }
 												| '[' Type ',' 'INTEGER' ']'{ 
 																											let type_elem = $2?; 
 																											let size = convert_number($lexer, $4)?;
@@ -28,6 +26,12 @@ Path -> Result<Path , ()>:
 		'ID' { 
 						Ok(Path::new(convert_lexeme($lexer, $1)?, $span))
 				 } 
+		// `root` may only be the first segment: the path is then resolved from the root module.
+		| 'root' '::' 'ID' {
+						let mut p = Path::new(convert_lexeme($lexer, $1)?, $span);
+						p.add_path(convert_lexeme($lexer, $3)?, $span);
+						Ok(p)
+				 }
 		| Path '::' 'ID'{
 		let mut p = $1?; p.add_path(convert_lexeme($lexer, $3)?, $span);
 		Ok(p)
@@ -190,7 +194,8 @@ Stmt -> Result<Stmt, ()>:
     | SimpleOperation ';' { Ok(Stmt::Semi($1?)) }
     | BlockLike { Ok(Stmt::Expr($1?)) }
     | LoopStmt { $1 }
-    | Function { Ok(Stmt::Item(ItemKind::Function($1?))) }  // nested fn: no access to outer locals
+    // nested fn: no access to outer locals; no `pub`, since nothing outside the block can reach it
+    | Function { Ok(Stmt::Item(ItemKind::Function(Vis::new(Visibility::Private, $1?)))) }
     | Targets '=' Values ';' { Ok(Stmt::Assign($1?, $3?)) }
     | ';' { Ok(Stmt::Empty) }
     ;
@@ -253,33 +258,54 @@ Function -> Result<Function, ()>:
                                                }
     ;
 // @doc: struct
-StructFields -> Result<Vec<Field>, ()>:
-      StructFields ',' 'ID' ':' Type {
-                                       let mut fields = $1?;
-                                       fields.push(Field::new(convert_lexeme($lexer, $3)?, $5?));
-                                       Ok(fields)
-                                     }
-    | 'ID' ':' Type { Ok(vec![Field::new(convert_lexeme($lexer, $1)?, $3?)]) }
+StructFields -> Result<Vec<Vis<Field>>, ()>:
+      StructFields ',' Visibility 'ID' ':' Type {
+                                                  let mut fields = $1?;
+                                                  fields.push(Vis::new($3?, Field::new(convert_lexeme($lexer, $4)?, $6?)));
+                                                  Ok(fields)
+                                                }
+    | Visibility 'ID' ':' Type { Ok(vec![Vis::new($1?, Field::new(convert_lexeme($lexer, $2)?, $4?))]) }
     ;
 Struct -> Result<Struct, ()>:
       'struct' 'ID' '{' StructFields '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, $4?)) }
     | 'struct' 'ID' '{' StructFields ',' '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, $4?)) }
     | 'struct' 'ID' '{' '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, vec![])) }
     ;
+// @doc: visibility
+// No `pub`: the name is private to its module and the modules below it.
+Visibility -> Result<Visibility, ()>:
+      /* empty */ { Ok(Visibility::Private) }
+    | 'pub' { Ok(Visibility::Pub) }
+    ;
 // @doc: impl-use-mod
-Functions -> Result<Vec<Function>, ()>:
+Functions -> Result<Vec<Vis<Function>>, ()>:
       /* empty */ { Ok(vec![]) }
-    | Functions Function {
-                           let mut methods = $1?;
-                           methods.push($2?);
-                           Ok(methods)
-                         }
+    | Functions Visibility Function {
+                                      let mut methods = $1?;
+                                      methods.push(Vis::new($2?, $3?));
+                                      Ok(methods)
+                                    }
     ;
 Impl -> Result<Impl, ()>:
       'impl' 'ID' '{' Functions '}' { Ok(Impl::new(convert_lexeme($lexer, $2)?, $4?)) }
     ;
-Use -> Result<Path, ()>:
-      'use' Path ';' { $2 }
+// The alias is None when there is no `as`: the name is then the path's last segment.
+Use -> Result<(Path, Option<String>), ()>:
+      'use' Path ';' { Ok(($2?, None)) }
+    | 'use' Path 'as' 'ID' ';' { Ok(($2?, Some(convert_lexeme($lexer, $4)?))) }
+    ;
+Export -> Result<(Path, Option<String>), ()>:
+      'export' Path ';' { Ok(($2?, None)) }
+    | 'export' Path 'as' 'ID' ';' { Ok(($2?, Some(convert_lexeme($lexer, $4)?))) }
+    ;
+// @doc: const-static
+// Module-level variables that may be `pub`. Both reuse the Let struct.
+Const -> Result<Let, ()>:
+      'const' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not)) }
+    ;
+Static -> Result<Let, ()>:
+      'static' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not)) }
+    | 'static' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $3)?, $5?, $7?, Mut::Mut)) }
     ;
 // No inline modules (`mod m { .. }`): a module's contents always live in another file.
 Mod -> Result<String, ()>:
@@ -289,12 +315,15 @@ Mod -> Result<String, ()>:
 // ---- program ----
 // @doc: items
 Item -> Result<ItemKind, ()>:
-      Function { Ok(ItemKind::Function($1?)) }
-    | Struct { Ok(ItemKind::Struct($1?)) }
+      Visibility Function { Ok(ItemKind::Function(Vis::new($1?, $2?))) }
+    | Visibility Struct { Ok(ItemKind::Struct(Vis::new($1?, $2?))) }
     | Impl { Ok(ItemKind::Impl($1?)) }
-    | Use { Ok(ItemKind::Use($1?)) }
-    | Mod { Ok(ItemKind::Mod($1?)) }
-    | Let { Ok(ItemKind::Let($1?)) }
+    | Use { let (path, alias) = $1?; Ok(ItemKind::Use(path, alias)) }
+    | Export { let (path, alias) = $1?; Ok(ItemKind::Export(path, alias)) }
+    | Visibility Mod { Ok(ItemKind::Mod(Vis::new($1?, $2?))) }
+    | Let { Ok(ItemKind::Let($1?)) }   // a top-level let is never pub; use const or static
+    | Visibility Const { Ok(ItemKind::Const(Vis::new($1?, $2?))) }
+    | Visibility Static { Ok(ItemKind::Static(Vis::new($1?, $2?))) }
     ;
 ItemList -> Result<Vec<ItemKind>, ()>:
       ItemList Item {
@@ -308,7 +337,7 @@ Program -> Result<Vec<ItemKind>, ()>:
       ItemList { $1 }
     ;
 %%
-use crate::ast::{Type, Path, Expr, Literal, FieldInit, UnOp, BinOp, Stmt, Mut, Block, ItemKind, SelfParam, Parameter, Function, Field, Struct, Impl, Let};
+use crate::ast::{Type, Path, Expr, Literal, FieldInit, UnOp, BinOp, Stmt, Mut, Block, ItemKind, SelfParam, Parameter, Function, Field, Struct, Impl, Let, Vis, Visibility};
 use lrlex::{DefaultLexeme, DefaultLexerTypes};
 use lrpar::NonStreamingLexer; // Lexeme is already imported by the generated parser
 

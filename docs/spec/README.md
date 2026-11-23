@@ -4,7 +4,7 @@ Purpose: index of the UPL frontend spec, and how its sections are laid out.
 
 Reader: developers of the UPL compiler frontend.
 
-Updated: 2026-11-17.
+Updated: 2026-11-23.
 
 The spec is ordered by the levels of the language, from tokens up to items. Each level contains the one below it, see [Levels of the language](../grammar.md#levels-of-the-language).
 
@@ -14,7 +14,7 @@ The spec is ordered by the levels of the language, from tokens up to items. Each
 | 1. Operations | [operations.md](operations.md) | Primary, Struct literal, Array literal, Postfix, Unary operation, Binary operation, Simple operation |
 | 2. Expressions | [expressions.md](expressions.md) | Expression, Block-like, If, Block |
 | 3. Statements | [statements.md](statements.md) | Statement, Let, Loops, Assignment |
-| 4. Items | [items.md](items.md) | Program, Function, Self parameter, Struct, Impl, Use and mod |
+| 4. Items | [items.md](items.md) | Program, Function, Self parameter, Struct, Impl, Visibility, Use export and mod, Const and static |
 | Types | [types.md](types.md) | Type |
 
 Theory: [ast.md](ast.md) explains what the AST is (structure without notation, before meaning), with the example `a + b * c`. [sdt.md](sdt.md) explains how the grammar actions build the AST, and why that translation is S-attributed.

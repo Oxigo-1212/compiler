@@ -22,7 +22,7 @@ Stmt -> Result<Stmt, ()>:
     | SimpleOperation ';' { Ok(Stmt::Semi($1?)) }
     | BlockLike { Ok(Stmt::Expr($1?)) }
     | LoopStmt { $1 }
-    | Function { Ok(Stmt::Item(ItemKind::Function($1?))) }  // nested fn: no access to outer locals
+    | Function { Ok(Stmt::Item(ItemKind::Function(Vis::new(Visibility::Private, $1?)))) }  // nested fn: no `pub`
     | Targets '=' Values ';' { Ok(Stmt::Assign($1?, $3?)) }
     | ';' { Ok(Stmt::Empty) }
     ;
@@ -36,7 +36,7 @@ Each alternative is one kind of statement:
 | `SimpleOperation ';'` | Expression whose value is discarded | `Stmt::Semi(Expr)` |
 | `BlockLike` | `if` or block, with no `;` | `Stmt::Expr(Expr)` |
 | `LoopStmt` | Loop, `break` or `continue` | `Stmt::While`, `Stmt::Loop`, `Stmt::For`, `Stmt::Break`, `Stmt::Continue` |
-| `Function` | Function declared inside a block | `Stmt::Item(ItemKind::Function)` |
+| `Function` | Function declared inside a block | `Stmt::Item(ItemKind::Function(Vis<Function>))`, always `Private` |
 | `Targets '=' Values ';'` | Assignment | `Stmt::Assign(Vec<Expr>, Vec<Expr>)` |
 | `';'` | Empty statement | `Stmt::Empty` |
 

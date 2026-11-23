@@ -34,6 +34,12 @@ use      "use"
 mod      "mod"
 self     "self"
 str      "str"
+pub      "pub"
+root     "root"
+export   "export"
+as       "as"
+const    "const"
+static   "static"
 
 // @doc: lex-ident-int
 [A-Za-z_][A-Za-z0-9_]*  "ID"

@@ -5,7 +5,7 @@ pub enum Type {
     Int32,
     Bool,
     Str,
-    Name(String),
+    Name(Path), // a struct, possibly in another module: Point, root::geo::Point
     Array(Box<Type>, u64), // The box breaks the recursion of the type. Type can't contain itself.
     Void
 }
@@ -105,12 +105,26 @@ pub enum Mut { Not, Mut }
 
 #[derive(Debug)]
 pub enum ItemKind {
-    Function(Function),
-    Struct(Struct),
-    Impl(Impl),
-    Use(Path),   // use a::b;
-    Mod(String), // mod m; contents live in another file (no inline modules)
-    Let(Let),    // top-level let
+    Function(Vis<Function>),
+    Struct(Vis<Struct>),
+    Impl(Impl),                     // no visibility: an impl introduces no name
+    Use(Path, Option<String>),      // use a::b;  use a::b as c;  (None: alias = last segment)
+    Export(Path, Option<String>),   // export a::b;  export a::b as c;  re-exports into this module
+    Mod(Vis<String>),               // mod m; only in mod.upl; contents live in another file
+    Let(Let),                       // top-level let: always private, so no Vis
+    Const(Vis<Let>),                // const X: int = 1;  never changes (mutability always Not)
+    Static(Vis<Let>),               // static [mut] X: int = 1;  one location for the whole program
+}
+
+// Whether a name may be used outside the module that declares it. Default: Private.
+#[derive(Debug)]
+pub enum Visibility { Private, Pub }
+
+// A node that can be marked `pub`. Passes that only need the node read `node`.
+#[derive(Debug)]
+pub struct Vis<T> {
+    vis: Visibility,
+    node: T,
 }
 
 // Whether a function takes `self` as its first parameter (a method) or not (static).
@@ -140,14 +154,20 @@ pub struct Field {
 
 #[derive(Debug)]
 pub struct Struct {
-    field: Vec<Field>, // empty for `struct E {}`
+    field: Vec<Vis<Field>>, // empty for `struct E {}`
     id: String,
 }
 
 #[derive(Debug)]
 pub struct Impl {
-    methods: Vec<Function>,
+    methods: Vec<Vis<Function>>,
     id: String, // the type name; name resolution links it to its struct
+}
+
+impl<T> Vis<T> {
+    pub fn new(vis: Visibility, node: T) -> Self {
+        Vis { vis, node }
+    }
 }
 
 impl Path {
@@ -198,13 +218,13 @@ impl Field {
 }
 
 impl Struct {
-    pub fn new(id: String, field: Vec<Field>) -> Self {
+    pub fn new(id: String, field: Vec<Vis<Field>>) -> Self {
         Struct { field, id }
     }
 }
 
 impl Impl {
-    pub fn new(id: String, methods: Vec<Function>) -> Self {
+    pub fn new(id: String, methods: Vec<Vis<Function>>) -> Self {
         Impl { methods, id }
     }
 }

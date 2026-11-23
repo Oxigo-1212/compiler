@@ -2,7 +2,7 @@
 
 Reader: developers of the UPL compiler frontend.
 
-Updated: 2026-11-17.
+Updated: 2026-11-23.
 
 Level 4: items. An item is anything at the top level of a file, outside every block. The rules are in `src/specs/parser.y`.
 
@@ -13,7 +13,9 @@ Sections:
 - [Self parameter](#self-parameter)
 - [Struct](#struct)
 - [Impl](#impl)
-- [Use and mod](#use-and-mod)
+- [Visibility](#visibility)
+- [Use, export and mod](#use-export-and-mod)
+- [Const and static](#const-and-static)
 
 ## Program
 
@@ -25,12 +27,15 @@ A program is a list of items. Every item is a declaration, an import or a module
 
 ```rust
 Item -> Result<ItemKind, ()>:
-      Function { Ok(ItemKind::Function($1?)) }
-    | Struct { Ok(ItemKind::Struct($1?)) }
+      Visibility Function { Ok(ItemKind::Function(Vis::new($1?, $2?))) }
+    | Visibility Struct { ... }
     | Impl { Ok(ItemKind::Impl($1?)) }
-    | Use { Ok(ItemKind::Use($1?)) }
-    | Mod { Ok(ItemKind::Mod($1?)) }
+    | Use { ... ItemKind::Use(path, alias) ... }
+    | Export { ... ItemKind::Export(path, alias) ... }
+    | Visibility Mod { ... }
     | Let { Ok(ItemKind::Let($1?)) }
+    | Visibility Const { ... }
+    | Visibility Static { ... }
     ;
 ItemList -> Result<Vec<ItemKind>, ()>:
       ItemList Item { ... push ... }
@@ -48,17 +53,18 @@ Program -> Result<Vec<ItemKind>, ()>:
 
 ```text
 use a::b;
-mod util;
+export a::c as d;
 struct P { x: int }
-impl P { fn get(self) -> int { self.x } }
-let limit: int = 10;
+impl P { pub fn get(self) -> int { self.x } }
+let base: int = 1;
+pub const LIMIT: int = 10;
 fn main() { }
 ```
 
 ### Notions used
 
-- **`Function`**, **`Struct`**, **`Impl`**, **`Use`**, **`Mod`**: see the sections below.
-- **`Let`** at the top level is a global variable. See [Let](statements.md#let).
+- **`Function`**, **`Struct`**, **`Impl`**, **`Use`**, **`Export`**, **`Mod`**, **`Visibility`**: see the sections below.
+- **`Let`** at the top level is a private module variable. See [Let](statements.md#let). **`Const`** and **`Static`**: see [Const and static](#const-and-static).
 
 ### Design reasons
 
@@ -67,7 +73,23 @@ fn main() { }
 
 ### AST representation (2026-11-16)
 
-`Program` returns `Vec<ItemKind>`, where `ItemKind` is `Function`, `Struct`, `Impl`, `Use(Path)`, `Mod(String)` or `Let`. `main.rs` prints this tree with `{:#?}`.
+`Program` returns `Vec<ItemKind>`. `main.rs` prints this tree with `{:#?}`.
+
+```rust
+enum ItemKind {
+    Function(Vis<Function>),
+    Struct(Vis<Struct>),
+    Impl(Impl),
+    Use(Path, Option<String>),
+    Export(Path, Option<String>),
+    Mod(Vis<String>),
+    Let(Let),
+    Const(Vis<Let>),
+    Static(Vis<Let>),
+}
+```
+
+The node types are described in the sections below.
 
 Since: 2026-11-11
 
@@ -113,11 +135,12 @@ fn outer() {
 
 - A function is an item, not a statement, as in rustc.
 - Functions may also be declared inside a block, Rust style. The inner function is visible only in that block and cannot use the outer function's local variables. The grammar has `Stmt -> Function` for this.
+- A nested function cannot be `pub`: nothing outside its block can reach it, so `pub fn` inside a block is a syntax error. Its AST node is always `Vis { vis: Private, .. }`.
 
 ### AST representation (2026-11-16)
 
 ```rust
-enum ItemKind { Function(Function), ... }
+enum ItemKind { Function(Vis<Function>), ... }
 struct Function {
     name: String,                // linking uses to definitions is name resolution's job
     self_param: SelfParam,       // enum SelfParam { Not, Value }
@@ -186,9 +209,9 @@ A struct declares a new type made of named, typed fields.
 ### Definition
 
 ```rust
-StructFields -> Result<Vec<Field>, ()>:
-      StructFields ',' 'ID' ':' Type { ... push ... }
-    | 'ID' ':' Type { Ok(vec![Field::new(...)]) }
+StructFields -> Result<Vec<Vis<Field>>, ()>:
+      StructFields ',' Visibility 'ID' ':' Type { ... push ... }
+    | Visibility 'ID' ':' Type { Ok(vec![Vis::new($1?, Field::new(...))]) }
     ;
 Struct -> Result<Struct, ()>:
       'struct' 'ID' '{' StructFields '}' { ... }
@@ -197,14 +220,14 @@ Struct -> Result<Struct, ()>:
     ;
 ```
 
-- Fields are `ID : Type`, separated by commas.
+- Fields are `ID : Type`, separated by commas. A field may be marked `pub`, see [Visibility](#visibility).
 - A trailing comma is allowed.
 - An empty body `{ }` is allowed.
 
 ### Example
 
 ```text
-struct P { x: int, y: bool }
+struct P { pub x: int, y: bool }
 struct E { }
 ```
 
@@ -215,9 +238,9 @@ struct E { }
 
 ### AST representation (2026-11-16)
 
-`ItemKind::Struct(Struct { field: Vec<Field>, id })`, with `Field { id, field_type }`.
+`ItemKind::Struct(Vis<Struct>)`, with `Struct { field: Vec<Vis<Field>>, id }` and `Field { id, field_type }`.
 
-- `Field` is its own type, not a reused `Parameter`, so fields can later gain visibility (`pub`, deferred) without changing parameters.
+- `Field` is its own type, not a reused `Parameter`, so fields carry visibility (`Vis<Field>`) without changing parameters.
 - `struct E {}` stores an empty `Vec`, not an `Option`.
 - A field in a declaration has a type and no value, unlike `FieldInit` in a [struct literal](operations.md#struct-literal).
 - The struct does not hold its methods, see [Impl](#impl).
@@ -233,22 +256,23 @@ An `impl` adds methods to a type that is declared elsewhere.
 ### Definition
 
 ```rust
-Functions -> Result<Vec<Function>, ()>:
+Functions -> Result<Vec<Vis<Function>>, ()>:
       /* empty */ { Ok(vec![]) }
-    | Functions Function { ... push ... }
+    | Functions Visibility Function { ... push ... }
     ;
 Impl -> Result<Impl, ()>:
       'impl' 'ID' '{' Functions '}' { Ok(Impl::new(...)) }
     ;
 ```
 
-An impl holds zero or more functions.
+An impl holds zero or more functions. Each method may be marked `pub`. The `impl` itself takes no `pub`, because it introduces no name of its own.
 
 ### Example
 
 ```text
 impl P {
-    fn get(self) -> int { self.x }
+    pub fn get(self) -> int { self.x }
+    fn helper(self) { }
 }
 ```
 
@@ -264,46 +288,145 @@ Name resolution links an impl to its type by name.
 
 ### AST representation (2026-11-16)
 
-`ItemKind::Impl(Impl { methods: Vec<Function>, id })`. Methods reuse the `Function` struct. `id` is the type name.
+`ItemKind::Impl(Impl { methods: Vec<Vis<Function>>, id })`. Methods reuse the `Function` struct. `id` is the type name.
 
 Since: 2026-11-11
 
-## Use and mod
+## Visibility
 
 ### Intuition
 
-`use` imports a name from another module. `mod` declares a module whose contents live in another file.
+A name is private to its module unless it is marked `pub`. A private name can be used in its own module and in every module below it. The full rule is in [Visibility](../../SYMBOL_TABLE.md#visibility).
 
 ### Definition
 
 ```rust
-Use -> Result<Path, ()>:
-      'use' Path ';' { $2 }
+Visibility -> Result<Visibility, ()>:
+      /* empty */ { Ok(Visibility::Private) }
+    | 'pub' { Ok(Visibility::Pub) }
+    ;
+```
+
+`Visibility` comes before a top-level `fn`, `struct`, `const`, `static` or `mod`, before a method in an `impl`, and before a struct field. It is not accepted before `impl`, `use`, `export`, a top-level `let`, or a function inside a block.
+
+### Example
+
+```text
+pub fn walk() { }
+pub struct P { pub x: int, y: int }
+impl P { pub fn get(self) -> int { self.x } }
+pub mod organs;
+pub impl P { }        // syntax error
+pub use a::b;         // syntax error: use `export`
+pub let x: int = 1;   // syntax error: use `const` or `static`
+```
+
+### Design reasons
+
+- Private is the default, so making a name public is always written out.
+- `impl` takes no `pub`, because it adds methods to a type and introduces no name.
+- `use` is always private and `export` is always public, so `pub` on them would have no meaning.
+- A nested function cannot be reached from outside its block, so `pub` on it would have no meaning.
+- A top-level `let` is never `pub`. A variable shared with other modules is a `const` or a `static`, as in Rust, so a name that other modules can use is marked as a constant or as one program-wide location.
+
+### AST representation (2026-11-23)
+
+```rust
+enum Visibility { Private, Pub }
+struct Vis<T> { vis: Visibility, node: T }
+```
+
+A node that can be `pub` is wrapped in `Vis<T>`. The wrapped types keep their fields, and passes that only need the node read `node`.
+
+Since: 2026-11-23
+
+## Use, export and mod
+
+### Intuition
+
+`use` imports a name from another module as a private alias. `export` re-exports a name, so it becomes a public item of the module that writes the line. `mod` declares a module whose contents live in another file.
+
+### Definition
+
+```rust
+Use -> Result<(Path, Option<String>), ()>:
+      'use' Path ';' { Ok(($2?, None)) }
+    | 'use' Path 'as' 'ID' ';' { Ok(($2?, Some(...))) }
+    ;
+Export -> Result<(Path, Option<String>), ()>:
+      'export' Path ';' { Ok(($2?, None)) }
+    | 'export' Path 'as' 'ID' ';' { Ok(($2?, Some(...))) }
     ;
 Mod -> Result<String, ()>:
       'mod' 'ID' ';' { convert_lexeme($lexer, $2) }
     ;
 ```
 
-Inline modules, as in `mod m { items }`, are a syntax error.
+- `as ID` renames the alias. Without it, the alias is the path's last segment.
+- Inline modules, as in `mod m { items }`, are a syntax error.
+- `mod` lines belong only in `mod.upl` files. The grammar accepts them in any file. The loader, which is not built yet, will reject them elsewhere, see [Module layout](../../SYMBOL_TABLE.md#module-layout).
 
 ### Example
 
 ```text
-use a::b;
+use root::util::dist;
+use root::util::dist as d;
+export organs::Heart;
 mod util;
 mod m { }     // syntax error
 ```
 
 ### Design reasons
 
-- There are no inline modules (since 2026-11-16). Each module is one file, as a Go package is one directory.
-- Finding and parsing the file for `mod m;` is left for when the compiler handles more than one file.
-- `use`: not yet reviewed.
+- There are no inline modules (since 2026-11-16). Each module is one file, or a folder with a `mod.upl`.
+- Re-exports have one keyword, `export`, and `pub use` does not exist, so each keyword has one meaning.
+- How paths, aliases and modules are resolved is described in [SYMBOL_TABLE.md](../../SYMBOL_TABLE.md).
 
-### AST representation (2026-11-16)
+### AST representation (2026-11-23)
 
-- `ItemKind::Use(Path)`. Linking the path to what it names is name resolution's job.
-- `ItemKind::Mod(String)`: the module name only.
+- `ItemKind::Use(Path, Option<String>)` and `ItemKind::Export(Path, Option<String>)`. The `Option` holds the `as` name. Linking the path to what it names is name resolution's job.
+- `ItemKind::Mod(Vis<String>)`: the module name and its visibility.
 
 Since: 2026-11-11
+
+## Const and static
+
+### Intuition
+
+`const` and `static` declare module-level variables that may be `pub`. A `const` never changes. A `static` is one location for the whole program, and `static mut` may be changed.
+
+### Definition
+
+```rust
+Const -> Result<Let, ()>:
+      'const' 'ID' ':' Type '=' Expr ';' { ... Mut::Not ... }
+    ;
+Static -> Result<Let, ()>:
+      'static' 'ID' ':' Type '=' Expr ';' { ... Mut::Not ... }
+    | 'static' 'mut' 'ID' ':' Type '=' Expr ';' { ... Mut::Mut ... }
+    ;
+```
+
+- A type and a value are required, as for `let`.
+- `const mut` is a syntax error.
+- `const` and `static` are items only. Inside a block they are a syntax error.
+
+### Example
+
+```text
+pub const MAX: int = 10;
+pub static COUNT: int = 0;
+static mut N: int = 1;
+const mut X: int = 1;    // syntax error
+```
+
+### Design reasons
+
+- Only `const` and `static` may be `pub`, so every module-level name that other modules can use is marked as a constant or as one program-wide location.
+- Whether a `const` is copied into each use, and how writes to a `static mut` are checked: not yet designed.
+
+### AST representation (2026-11-23)
+
+`ItemKind::Const(Vis<Let>)` and `ItemKind::Static(Vis<Let>)`. Both reuse the `Let` struct (name, type, value, mutability). A `const` always has `Mut::Not`.
+
+Since: 2026-11-23

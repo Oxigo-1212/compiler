@@ -70,7 +70,7 @@ x        a::b      self
 
 ### Notions used
 
-- **`Path`** is a name, or names joined by `::`, such as `a::b`. It also stores its position (a span) for error messages.
+- **`Path`** is a name, or names joined by `::`, such as `a::b`. A path may start with the keyword `root`, as in `root::util::dist`, and `root` may only be the first segment. `root` is stored as an ordinary first segment. The path also stores its position (a span) for error messages.
 - **`'STRING'`** is a string token. See [Strings](lexer.md#strings).
 - **`FieldInits`** and **`ElementList`** are the contents of a struct literal and an array literal. See [Struct literal](#struct-literal) and [Array literal](#array-literal).
 

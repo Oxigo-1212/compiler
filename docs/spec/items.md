@@ -296,7 +296,7 @@ Since: 2026-11-11
 
 ### Intuition
 
-A name is private to its module unless it is marked `pub`. A private name can be used in its own module and in every module below it. The full rule is in [Visibility](../../SYMBOL_TABLE.md#visibility).
+A name is private to its module unless it is marked `pub`. A private name can be used in its own module and in every module below it. The full rule is in [Visibility](modules.md#visibility).
 
 ### Definition
 
@@ -364,7 +364,7 @@ Mod -> Result<String, ()>:
 
 - `as ID` renames the alias. Without it, the alias is the path's last segment.
 - Inline modules, as in `mod m { items }`, are a syntax error.
-- `mod` lines belong only in `mod.upl` files. The grammar accepts them in any file. The loader, which is not built yet, will reject them elsewhere, see [Module layout](../../SYMBOL_TABLE.md#module-layout).
+- `mod` lines belong only in `mod.upl` files. The grammar accepts them in any file. The loader, which is not built yet, will reject them elsewhere, see [Module layout](modules.md#module-layout).
 
 ### Example
 
@@ -380,7 +380,7 @@ mod m { }     // syntax error
 
 - There are no inline modules (since 2026-11-16). Each module is one file, or a folder with a `mod.upl`.
 - Re-exports have one keyword, `export`, and `pub use` does not exist, so each keyword has one meaning.
-- How paths, aliases and modules are resolved is described in [SYMBOL_TABLE.md](../../SYMBOL_TABLE.md).
+- The rules for paths, aliases and modules are in [Modules](modules.md).
 
 ### AST representation (2026-11-23)
 

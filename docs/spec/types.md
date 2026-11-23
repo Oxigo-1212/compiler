@@ -26,7 +26,7 @@ Type -> Result<Type, ()>:
     ;
 ```
 
-- `Path` is a type name, for example a struct name. It may be a path into another module, such as `root::geo::Point`, and follows the same rules as every other path, see [Paths](../../SYMBOL_TABLE.md#paths).
+- `Path` is a type name, for example a struct name. It may be a path into another module, such as `root::geo::Point`, and follows the same rules as every other path, see [Paths](modules.md#paths).
 - `[Type, INTEGER]` is an array type with an element type and a fixed size. Array types nest.
 - There are no generics or references yet.
 

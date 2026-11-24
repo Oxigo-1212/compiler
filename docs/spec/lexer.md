@@ -152,10 +152,30 @@ The parser's `'STRING'` action decodes the token with `unescape` (after the seco
 
 - **`Literal::Str`** is the AST node for a string. It always holds the decoded text, never the quotes or the raw escapes, so later passes must not decode it again. A newline is one character (byte 10) in the stored string; Rust's `{:?}` only displays it as `\n`.
 
+<<<<<<< HEAD
 ### Design reasons
 
 - Strings follow Go and Java: one built-in, immutable `str` type with no references. Rust instead has three: `str`, `&str` and `String`.
 - Escapes are decoded in the parser, as rustc does, not kept raw as Go does.
 - Strings created at run time will need a garbage collector, or memory that is never freed. That runtime decision is not made yet.
+=======
+`STRING` is `"([^"\\\n]|\\.)*"`: text between double quotes, on one line. The lexer accepts a backslash followed by any character; it does not decide which escapes are valid. An unclosed `"` or a line break inside a literal is a lexing error.
+
+The parser's `'STRING'` action decodes the token with `unescape` (after the second `%%` in `src/specs/parser.y`): it drops the surrounding quotes and translates each escape into one character.
+
+| Escape | Becomes |
+|:---|:---|
+| `\n` | newline |
+| `\t` | tab |
+| `\\` | one backslash |
+| `\"` | a double quote |
+| anything else | error: `unknown escape \q` |
+
+Contract: `Literal::Str` always holds this decoded text, never the quotes or raw escapes, so later passes must not decode again. A newline is one character (byte 10) in the stored string; Rust's `{:?}` only displays it as `\n`.
+
+### Intention
+
+Strings follow Go and Java: one built-in, immutable `str` type with no references, because it is simpler than Rust's `str`/`&str`/`String` (learner decision). Escapes are decoded in the parser, as rustc does, rather than kept raw as Go does (learner decision). Strings created at run time will need a garbage collector or unfreed memory; that is a runtime decision for later.
+>>>>>>> main
 
 Since: 2026-11-11

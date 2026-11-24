@@ -80,6 +80,7 @@ Since: 2026-11-11
 
 ### Definition
 
+<<<<<<< HEAD
 ```rust
 If -> Result<Expr, ()>:
       'if' Expr Block { Ok(Expr::If(cond, then, None)) }
@@ -87,6 +88,9 @@ If -> Result<Expr, ()>:
     | 'if' Expr Block 'else' If { Ok(Expr::If(cond, then, Some(else_if))) }
     ;
 ```
+=======
+Expressions that are not block-like: a binary expression, range `a .. b` (does not chain), `return` with optional value. `break`, `continue` and assignment are statements, see [loop-stmt](statements.md#loop-stmt) and [assign](statements.md#assign).
+>>>>>>> main
 
 - `else` is optional.
 - `else If` gives `else if` chains.
@@ -124,12 +128,16 @@ A block is a list of statements between `{` and `}`. Its value is the last expre
 
 ### Definition
 
+<<<<<<< HEAD
 ```rust
 Block -> Result<Block, ()>:
       '{' Stmts '}' { ... a last Stmt::Expr becomes the tail ... }
     | '{' Stmts SimpleOperation '}' { Ok(Block::new($2?, Some(Box::new($3?)))) }
     ;
 ```
+=======
+From lowest to highest: `..`, `||`, `&&`, comparisons `== != < <= > >=`, `+ -`, `* / %`, unary `- !`, postfix. The `%left`/`%nonassoc` lines set the binary levels; later lines bind tighter. Comparisons are `%nonassoc`, so `a < b < c` is a syntax error.
+>>>>>>> main
 
 - `{ Stmts SimpleOperation }` gives a block whose value is the final `SimpleOperation`, as in `{ x = 1; 0 }`.
 - A trailing `if` or block, as in `{ if b { 1 } else { 2 } }`, parses as a statement, not as the final value. The block action then moves it into the value slot. This happens while building the AST, because doing it in the grammar would cause a reduce/reduce conflict.
@@ -153,18 +161,84 @@ A block is used by function and impl bodies, `if` branches, loop bodies and `Blo
 
 ### Design reasons
 
+<<<<<<< HEAD
 - `{ }` replaces `begin ... end` from the original UPL.
 - The value is the last line without `;`. Because `if` is an expression, a trailing `if` gives the block its value.
 - Open, for the type checker: whether a block-like in the middle of a block may have a value. Rust requires that it has none.
+=======
+These rules are the bottom of the expression chain. Each level is built from the one to its right:
+
+```text
+SimpleOperation → BinaryOperation → UnaryOperation → Postfix → Primary
+   (= .. return)    (+ * < && ...)       (- !)       (call . [])  (atoms)
+     loosest                                                      tightest
+```
+
+**Operator positions.** An operator can come before its operand (prefix: `-x`, `!b`, rule `UnaryOperation`), between two operands (infix: `a + b`, rule `BinaryOperation`), or after its operand (postfix: rule `Postfix`).
+
+**Postfix** has three forms, applied after a value:
+
+| Form | Alternative | Example |
+|:---|:---|:---|
+| Call | `Postfix '(' Args ')'` | `f(1, 2)` |
+| Field | `Postfix '.' 'ID'` | `p.x` |
+| Index | `Postfix '[' Expr ']'` | `a[0]` |
+
+The rule is left-recursive, so postfix forms chain left to right, each applying to the result so far. `a::b(i)[0].c` is the path `a::b`, called with `i`, indexed with `0`, then field `c`:
+
+```text
+Field .c
+  └─ Index [0]
+       └─ Call (i)
+            └─ Path a::b
+```
+
+Postfix binds tightest of all operators: `-a.b` is `-(a.b)`, and `x + f(y)` is `x + (f(y))`. A method call `p.get()` has no rule of its own: it is a field access followed by a call.
+
+**Primary** holds the atoms: complete values that need no operator.
+
+| Group | Alternatives | Example |
+|:---|:---|:---|
+| Names | `Path`, `'self'` | `x`, `a::b`, `self` |
+| Literals | `'INTEGER'`, `'STRING'`, `'true'`, `'false'` | `42`, `"hi"` ([lex-string](lexer.md#lex-string)), `true` |
+| Grouping | `'(' Expr ')'` | `(a + b)` |
+| Struct literals | `'.' '{' FieldInits '}'` and variants | `.{ x: 3 }` ([struct-literal](expressions.md#struct-literal)) |
+| Array literals | `'[' ElementList ']'` and variants | `[1, 2, 3]` ([array-literal](expressions.md#array-literal)) |
+
+`( Expr )` turns any expression back into an atom, which is how parentheses override precedence: in `(a + b) * c`, `(a + b)` is one primary. The parentheses leave no AST node; the action passes the inner value up. Call arguments (`Args`) allow a trailing comma and may be empty.
+
+**What a primary carries into the AST.** Each alternative holds only what is written at that spot in the source, minus punctuation:
+
+| Alternative | Source | Data |
+|:---|:---|:---|
+| `'INTEGER'` | `42` | the value |
+| `'STRING'` | `"hi"` | the text |
+| `'true'`, `'false'` | `true` | the boolean |
+| `'self'` | `self` | nothing: only "self appears here" |
+
+A literal carries no name. In `let x: int = 42;` the name `x` belongs to the `Let` node, and the literal `42` holds only its value; the same literal could appear in `f(42)` or `[42]` with no name at all:
+
+```text
+Let { name: "x", ty: Int32, value: Int(42) }
+```
+
+`self` carries no data because the parser cannot know which object it refers to (that depends on the call, `p.get()` vs `q.get()`, at run time). A later pass checks that `self` is inside a method and gives it that `impl`'s struct type. Position (where a literal is, for error messages) is a span, like `Path`'s span: location, not a name.
+>>>>>>> main
 
 ### AST representation (2026-11-15)
 
+<<<<<<< HEAD
 A block is a list of statements plus a separate **tail**: the final expression with no `;`, which is the block's value.
 
 ```rust
 struct Block { stmts: Vec<Stmt>, tail: Option<Box<Expr>> }   // tail None: no value
 Expr::Block(Block)   // a block used as a value
 ```
+=======
+Placing literals and names at the bottom lets them appear anywhere an expression can (`[1, 2][0]`, `.{ x: 3 }.x`). Every name, including a plain variable `x`, is stored as `Expr::Path`: the parser has no scopes, so it cannot know whether a name is a variable, function or type; name resolution decides that later (learner decision, like rustc). Other choices: not yet reviewed.
+
+Since: 2026-11-11 (explanation added 2026-11-13)
+>>>>>>> main
 
 - `Block` is a separate struct (2026-11-16), so a function body can be typed `Block`. The type guarantees that the body is a block, and the semantic pass does not have to check it. `if` branches, loop bodies and `BlockLike` wrap it in `Expr::Block`.
 - The tail is a separate field, not the last list item, so the parser answers "what is this block's value?" once, and every later pass reads the field. rustc instead keeps one list and treats its last item as the value.
@@ -181,6 +255,7 @@ An expression inside the list is wrapped in a statement variant, because a `Vec`
 
 #### Why the tail has two paths
 
+<<<<<<< HEAD
 A block-like expression ends in `}`, so it needs no `;`, even in the middle of a block. When the parser reads one, it cannot yet tell whether more statements follow. It stores the expression as `Stmt::Expr`, and the block action moves it into the tail if it turns out to be last.
 
 Any other expression, such as `a - b`, needs a `;` in the middle of a block. Without a `;`, the only valid place for it is the end, so the grammar puts it in the tail slot at once, and it never becomes `Stmt::Expr`.
@@ -192,5 +267,30 @@ Any other expression, such as `a - b`, needs a `;` in the middle of a block. Wit
 | `{ if c {1} else {2} x }` | `Expr(if ...)` | `x` |
 | `{ { f(); } }` | (empty) | the inner block (moved from `Stmt::Expr`) |
 | `{ a - b c }` | — | syntax error: `a - b` is not last and has no `;` |
+=======
+**AST.** `Expr::FieldInits(Vec<FieldInit>)`; each `FieldInit` always has a name, a value and a span. `.{ }` is an empty `Vec`: "no fields" lives in the container, never as an empty element, so no field of `FieldInit` is optional. The trailing comma leaves no trace, so `.{ x: 3 }` and `.{ x: 3, }` give the same node.
+
+### Intention
+
+Field access (`p.x`) and calls (`P::new()`) need an existing value, so the language needs one built-in way to create one; constructors are built on top of it (learner decision). The leading `.` follows Zig: it doesn't clash with blocks or other syntax (`.{ }` vs `{ }`), and the learner found it the only plausible form for struct initialisation; fields use Rust style `x: 3`, matching struct declarations (learner decision). Empty structs kept after the learner questioned them (2026-11-14); in Rust they serve as namespaces, marker types and trait carriers, the last two need traits or generics.
+
+Since: 2026-11-11
+
+## array-literal
+
+Source: `@doc: array-literal` in `src/specs/parser.y`
+
+### Definition
+
+`[Expr, ...]` creates an array value, for example `let a: [int, 3] = [1, 2, 3];`. At least one element; trailing comma allowed. `[]` is a syntax error. Matching the element count to the type is left to the type checker.
+
+**AST.** `Expr::Array(Vec<Expr>)`. `ElementList` only collects elements (`Result<Vec<Expr>, ()>`); `Primary` wraps them in `Expr::Array`. The rule is left-recursive and each step pushes to the end, so the vector keeps source order, and each element is a full `Expr` tree (`[a + 1, [2, 3]]` nests). No size is stored; the element count is the vector's length.
+
+**Trailing comma.** `[1, 2,]` gives the same node as `[1, 2]`. It is for convenience, not error detection: every line of a multi-line list has the same shape, so edits and diffs touch one line. `[,]` and `[1,,2]` remain syntax errors.
+
+### Intention
+
+Rust-style literal, chosen by the learner. Elements use their own `ElementList` rule rather than sharing `ArgList` with calls: the grammar should read by meaning (learner decision). Empty `[]` is forbidden in the grammar (learner decision). The type `[int, 0]` is invalid; zero-length collections will use a vector type, planned (learner decision). The grammar still accepts `[int, 0]`; the type checker must reject it. Not storing the size in the node: learner choice, reason not yet reviewed.
+>>>>>>> main
 
 Since: 2026-11-11

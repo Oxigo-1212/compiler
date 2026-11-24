@@ -91,6 +91,10 @@ enum ItemKind {
 
 The node types are described in the sections below.
 
+### AST representation (2026-11-16)
+
+`Program` returns `Vec<ItemKind>`, where `ItemKind` is `Function`, `Struct`, `Impl`, `Use(Path)`, `Mod(String)` or `Let`. `main.rs` prints this tree with `{:#?}`.
+
 Since: 2026-11-11
 
 ## Function
@@ -115,6 +119,7 @@ Param -> Result<Parameter, ()>:
 - `-> Type` before the block is optional.
 - `Params` also accepts `self` as the first parameter, see [Self parameter](#self-parameter).
 
+<<<<<<< HEAD
 ### Example
 
 ```text
@@ -136,21 +141,33 @@ fn outer() {
 - A function is an item, not a statement, as in rustc.
 - Functions may also be declared inside a block, Rust style. The inner function is visible only in that block and cannot use the outer function's local variables. The grammar has `Stmt -> Function` for this.
 - A nested function cannot be `pub`: nothing outside its block can reach it, so `pub fn` inside a block is a syntax error. Its AST node is always `Vis { vis: Private, .. }`.
+=======
+A function is an **item**, not a statement (learner decision, following rustc). Functions may also be declared inside a block, Rust style: the inner function is visible only in that block and cannot use the outer function's local variables (learner decision). The grammar has `Stmt -> Function` for this.
+>>>>>>> main
 
 ### AST representation (2026-11-16)
 
 ```rust
+<<<<<<< HEAD
 enum ItemKind { Function(Vis<Function>), ... }
 struct Function {
     name: String,                // linking uses to definitions is name resolution's job
     self_param: SelfParam,       // enum SelfParam { Not, Value }
     parameters: Vec<Parameter>,  // struct Parameter { name: String, return_type: Type }
+=======
+enum ItemKind { Function(Function) }
+struct Function {
+    name: String,                // like let; linking uses to definitions is name resolution's job
+    self_param: SelfParam,       // enum SelfParam { Not, Value }
+    parameters: Vec<Parameter>,  // struct Parameter { name: String, tpe: Type }
+>>>>>>> main
     return_type: Option<Type>,   // None: no `-> Type`
     body: Block,
 }
 Stmt::Item(ItemKind)             // a nested item inside a block
 ```
 
+<<<<<<< HEAD
 - The name is a `String`, because a definition is one name, not a `Path`.
 - `self` is a separate field, not a parameter, so one field tells a method apart from a static function.
 - The body is typed `Block`, see [Block](expressions.md#block).
@@ -158,6 +175,9 @@ Stmt::Item(ItemKind)             // a nested item inside a block
 - The parameter's type field is named `return_type` in `src/ast.rs`, although it holds the parameter's type.
 
 Limit: names have no span, so an error cannot point at a definition.
+=======
+Learner decisions: name as `String` (a definition is one name, not a `Path`); `self` as a separate enum field, not a parameter, for readability; `body: Block`; fields built through `Function::new` and `Parameter::new`. `Params` returns `(SelfParam, Vec<Parameter>)`, because the grammar finds `self` there. `Program` returns `Vec<ItemKind>`. Struct, impl, use, mod and top-level `let` items still return `Err(())`, so a program using them prints `error: could not build AST`. Known cost: names have no span, so errors cannot point at a definition yet.
+>>>>>>> main
 
 Since: 2026-11-11
 
@@ -198,6 +218,10 @@ impl P {
 - Rust-style `self`, so a method can read and change its own struct.
 - Static functions called through `P::method()` already parse. Their meaning is not designed yet.
 
+### AST representation (2026-11-16)
+
+`ItemKind::Struct(Struct { field: Vec<Field>, id })`, with `Field { id, field_type }`. Learner decisions: `Field` is its own type, not a reused `Parameter`, so fields can later gain visibility (`pub`, deferred) without touching parameters; `struct E {}` stores an empty `Vec`, not an `Option`; a definition field has a type and no value, unlike `FieldInit` in a struct literal. The struct does not hold its impl: see [impl-use-mod](#impl-use-mod).
+
 Since: 2026-11-11
 
 ## Struct
@@ -208,6 +232,7 @@ A struct declares a new type made of named, typed fields.
 
 ### Definition
 
+<<<<<<< HEAD
 ```rust
 StructFields -> Result<Vec<Vis<Field>>, ()>:
       StructFields ',' Visibility 'ID' ':' Type { ... push ... }
@@ -219,11 +244,15 @@ Struct -> Result<Struct, ()>:
     | 'struct' 'ID' '{' '}' { ... vec![] ... }
     ;
 ```
+=======
+`impl ID { functions }` holds zero or more functions. `use Path ;` imports a path like `a::b`. `mod ID ;` declares a module whose contents live in another file. Inline modules (`mod ID { items }`) are a syntax error.
+>>>>>>> main
 
 - Fields are `ID : Type`, separated by commas. A field may be marked `pub`, see [Visibility](#visibility).
 - A trailing comma is allowed.
 - An empty body `{ }` is allowed.
 
+<<<<<<< HEAD
 ### Example
 
 ```text
@@ -244,6 +273,13 @@ struct E { }
 - `struct E {}` stores an empty `Vec`, not an `Option`.
 - A field in a declaration has a type and no value, unlike `FieldInit` in a [struct literal](operations.md#struct-literal).
 - The struct does not hold its methods, see [Impl](#impl).
+=======
+`impl` is a separate item, not part of the struct (learner decision). The parser builds one item at a time, so it cannot attach an impl to its struct; an impl may also come before its struct, a type may have several impls, and `impl Q` without `struct Q` must be reported. Name resolution links an impl to its type by name. No inline modules: the learner finds them counterintuitive (decision 2026-11-16, like Go packages). Finding and parsing the file for `mod m;` is left for when the compiler handles more than one file. `use`: not yet reviewed.
+
+### AST representation (2026-11-16)
+
+`ItemKind::Impl(Impl { methods: Vec<Function>, id })`. Methods reuse the `Function` struct; `id` is the type name. `ItemKind::Use(Path)`; linking the path to what it names is name resolution's job. `ItemKind::Mod(String)`: the id only.
+>>>>>>> main
 
 Since: 2026-11-11
 

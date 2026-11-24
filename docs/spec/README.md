@@ -86,3 +86,10 @@ Prints any tag that is in the source but not in the table above, or the other wa
 comm -3 <(grep -rhoE "@doc: [a-z-]+" src/ | cut -d' ' -f2 | sort -u) \
         <(grep -oE '^\| `[a-z-]+`' docs/spec/README.md | tr -d '|` ' | sort -u)
 ```
+
+The same check for the one-sentence summary in [`docs/grammar.md`](../grammar.md): prints any grammar tag (from `src/specs/`) that has no `#<tag>` link there, or a link to a tag that does not exist.
+
+```sh
+comm -3 <(grep -rhoE "@doc: [a-z-]+" src/specs/ | cut -d' ' -f2 | sort -u) \
+        <(grep -oE "\.md#[a-z-]+\)" docs/grammar.md | sed -E 's/.*#([a-z-]+)\)/\1/' | sort -u)
+```

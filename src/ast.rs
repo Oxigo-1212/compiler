@@ -16,13 +16,30 @@ pub struct Path {
     pos: Span
 }
 
+<<<<<<< HEAD
+=======
+impl Path {
+    pub fn new(lexeme: String, span: Span) -> Self {
+        Path { segments: vec![lexeme], pos: span }
+    }
+    pub fn add_path(&mut self, lexeme: String, span: Span) {
+        self.segments.push(lexeme);
+        self.pos = span;
+    }
+    
+}
+
+>>>>>>> main
 #[derive(Debug)]
 pub enum Literal {
     Int(u64),
     Bool(bool),
     Str(String),
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> main
 #[derive(Debug)]
 pub enum Expr {
     Lit(Literal),
@@ -64,6 +81,10 @@ pub enum UnOp {
     Not, // !b
 }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> main
 #[derive(Debug)]
 pub struct FieldInit {
     name: String,
@@ -71,6 +92,16 @@ pub struct FieldInit {
     pos: Span
 }
 
+<<<<<<< HEAD
+=======
+
+impl FieldInit {
+    pub fn new(lexeme: String, span: Span, expr: Expr) -> Self {
+        FieldInit { name: lexeme, value: expr, pos: span  }
+    }
+}
+
+>>>>>>> main
 #[derive(Debug)]
 pub enum Stmt {
     Declaration(Let), // let mut x: int = 1;
@@ -80,7 +111,11 @@ pub enum Stmt {
     Break,                                // break;
     Continue,                             // continue;
     Semi(Expr),  // expression with `;`: f(); value discarded
+<<<<<<< HEAD
     Expr(Expr),  // nested block or `if` without `;`: { } / if a { } — becomes the tail if last
+=======
+    Expr(Expr),  // block-like without `;`: if a { } — becomes the tail if last
+>>>>>>> main
     Empty,       // lone `;`
     Item(ItemKind), // nested item: fn h() {} inside a block
     Assign(Vec<Expr>, Vec<Expr>), // targets, values matched by index: a, b = b, a;
@@ -92,6 +127,15 @@ pub struct Block {
     tail: Option<Box<Expr>>, // None: block has no value
 }
 
+<<<<<<< HEAD
+=======
+impl Block {
+    pub fn new(stmts: Vec<Stmt>, tail: Option<Box<Expr>>) -> Self {
+        Block { stmts, tail }
+    }
+}
+
+>>>>>>> main
 #[derive(Debug)]
 pub struct Let {
     name: String,
@@ -100,11 +144,21 @@ pub struct Let {
     mutability: Mut,
 }
 
+<<<<<<< HEAD
+=======
+impl Let {
+    pub fn new(name: String, tpe: Type, value: Expr, mutability: Mut) -> Self {
+        Let { name, tpe, value, mutability }
+    }
+}
+
+>>>>>>> main
 #[derive(Debug)]
 pub enum Mut { Not, Mut }
 
 #[derive(Debug)]
 pub enum ItemKind {
+<<<<<<< HEAD
     Function(Vis<Function>),
     Struct(Vis<Struct>),
     Impl(Impl),                     // no visibility: an impl introduces no name
@@ -125,6 +179,14 @@ pub enum Visibility { Private, Pub }
 pub struct Vis<T> {
     vis: Visibility,
     node: T,
+=======
+    Function(Function),
+    Struct(Struct),
+    Impl(Impl),
+    Use(Path),   // use a::b;
+    Mod(String), // mod m; contents live in another file (no inline modules)
+    Let(Let),    // top-level let
+>>>>>>> main
 }
 
 // Whether a function takes `self` as its first parameter (a method) or not (static).
@@ -137,6 +199,15 @@ pub struct Parameter {
     return_type: Type,
 }
 
+<<<<<<< HEAD
+=======
+impl Parameter {
+    pub fn new(name: String, return_type: Type) -> Self {
+        Parameter { name, return_type }
+    }
+}
+
+>>>>>>> main
 #[derive(Debug)]
 pub struct Function {
     name: String,
@@ -146,6 +217,7 @@ pub struct Function {
     body: Block,
 }
 
+<<<<<<< HEAD
 #[derive(Debug)]
 pub struct Field {
     id: String,
@@ -204,6 +276,8 @@ impl Parameter {
     }
 }
 
+=======
+>>>>>>> main
 impl Function {
     pub fn new(name: String, self_param: SelfParam, parameters: Vec<Parameter>,
                return_type: Option<Type>, body: Block) -> Self {
@@ -211,20 +285,51 @@ impl Function {
     }
 }
 
+<<<<<<< HEAD
+=======
+#[derive(Debug)]
+pub struct Field {
+    id: String,
+    field_type: Type,
+}
+
+>>>>>>> main
 impl Field {
     pub fn new(id: String, field_type: Type) -> Self {
         Field { id, field_type }
     }
 }
+<<<<<<< HEAD
 
 impl Struct {
     pub fn new(id: String, field: Vec<Vis<Field>>) -> Self {
+=======
+#[derive(Debug)]
+pub struct Struct {
+    field: Vec<Field>, // empty for `struct E {}`
+    id: String,
+}
+
+impl Struct {
+    pub fn new(id: String, field: Vec<Field>) -> Self {
+>>>>>>> main
         Struct { field, id }
     }
 }
 
+<<<<<<< HEAD
 impl Impl {
     pub fn new(id: String, methods: Vec<Vis<Function>>) -> Self {
+=======
+#[derive(Debug)]
+pub struct Impl {
+    methods: Vec<Function>,
+    id: String, // the type name; name resolution links it to its struct
+}
+
+impl Impl {
+    pub fn new(id: String, methods: Vec<Function>) -> Self {
+>>>>>>> main
         Impl { methods, id }
     }
 }

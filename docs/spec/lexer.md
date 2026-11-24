@@ -1,80 +1,136 @@
-# Lexer tokens
+# Tokens
 
-Rules in `src/specs/lexer.l`. These produce tokens; they are not grammar symbols.
+Purpose: defines how the lexer cuts UPL source text into tokens.
 
-## lex-skip
+Reader: developers of the UPL compiler frontend.
 
-Source: `@doc: lex-skip` in `src/specs/lexer.l`
+Updated: 2026-11-17.
+
+Level 0: the lexer. The lexer cuts the source text into tokens, and the parser reads only tokens. The rules are in `src/specs/lexer.l`.
+
+How the lexer picks a rule: it takes the longest match, and when two rules match the same length, the earlier rule wins.
+
+## Skipped text
+
+### Intuition
+
+Some text is only for the reader: spaces, line breaks and comments. The lexer drops it, so the parser never sees it.
 
 ### Definition
 
-Whitespace (`[ \t\r\n]+`), `//` line comments and `/* ... */` block comments produce no token. Block comments do not nest; the first `*/` ends them.
+```text
+[ \t\r\n]+       ;    // space, tab, line breaks
+\/\/[^\r\n]*     ;    // `//` comment, until the end of the line
+/\*(?s:.)*?\*/   ;    // `/* ... */` comment
+```
 
-An unclosed `/*` is not a lexer error: it lexes as `/` then `*` and fails in the parser.
+A rule with `;` instead of a token name produces no token.
 
-### Intention
+- Block comments do not nest: the first `*/` ends the comment.
+- An unclosed `/*` is not a lexer error. It lexes as `/` then `*`, and the parser reports the error.
+
+### Example
+
+```text
+let x: int = 1;   // this comment is dropped
+/* so is this one */
+```
+
+### Design reasons
 
 Not yet reviewed.
 
 Since: 2026-11-11
 
-## lex-keywords
+## Keywords
 
-Source: `@doc: lex-keywords` in `src/specs/lexer.l`
+### Intuition
+
+A keyword is a word that the language reserves for itself, so it cannot be used as a name.
 
 ### Definition
 
-Reserved words: `let mut fn int bool true false if else while loop for in return break continue struct impl use mod self str`.
+```text
+let mut fn int bool true false if else while loop for in
+return break continue struct impl use mod self str
+pub root export as const static
+```
 
-lrlex picks the longest match; on a tie the earlier rule wins. Keywords are listed before `ID`, so `let` is a keyword but `letter` is an `ID`.
+Each keyword is its own token. The keyword rules come before the `ID` rule, so on a tie the keyword wins: `let` is a keyword, but `letter` is an `ID`, because `letter` is the longer match.
 
-### Intention
+### Design reasons
 
 Not yet reviewed.
 
 Since: 2026-11-11
 
-## lex-ident-int
+## Names and integers
 
-Source: `@doc: lex-ident-int` in `src/specs/lexer.l`
+### Intuition
+
+A name (`ID`) labels a variable, function, field or type. An integer (`INTEGER`) is a number written in the source.
 
 ### Definition
 
-`ID` is `[A-Za-z_][A-Za-z0-9_]*`. `INTEGER` is `[0-9]+` (no sign; `-` is a separate operator token).
+```text
+[A-Za-z_][A-Za-z0-9_]*   "ID"
+[0-9]+                   "INTEGER"
+```
 
-This is wider than the old UPL rule `[A-Za-z]+[0-9]*`: `_` and digits may appear anywhere after the first character.
+- A name starts with a letter or `_`, followed by letters, digits or `_`.
+- An integer is one or more digits, with no sign. In `-5`, the `-` is a separate operator token.
 
-### Intention
+### Example
+
+```text
+x   _tmp   point2   my_var     // ID
+0   42     1000                // INTEGER
+```
+
+### Design reasons
+
+The name rule is wider than the original UPL rule `[A-Za-z]+[0-9]*`: here `_` and digits may appear anywhere after the first character. Other choices: not yet reviewed.
+
+Since: 2026-11-11
+
+## Operators
+
+### Intuition
+
+Operators and punctuation are the symbols between names and values: `+`, `==`, `(`, `;` and so on.
+
+### Definition
+
+| Kind | Tokens |
+|:---|:---|
+| Two characters | `== != >= <= && \|\| -> :: ..` |
+| One character | `= > < ! + - * / % . , ( ) { } [ ] ; :` |
+
+Because the lexer takes the longest match, `==` is one token, not two `=` tokens.
+
+### Design reasons
 
 Not yet reviewed.
 
 Since: 2026-11-11
 
-## lex-operators
+## Strings
 
-Source: `@doc: lex-operators` in `src/specs/lexer.l`
+### Intuition
 
-### Definition
-
-Two-character operators: `== != >= <= && || -> :: ..`. One-character tokens: `= > < ! + - * / % . , ( ) { } [ ] ; :`.
-
-Longest match means `==` is one token, not two `=`.
-
-### Intention
-
-Not yet reviewed.
-
-Since: 2026-11-11
-
-## lex-string
-
-Source: `@doc: lex-string` in `src/specs/lexer.l`
+A string is text written between double quotes. A backslash writes a character that cannot be typed directly, such as a newline.
 
 ### Definition
 
-`STRING` is `"([^"\\\n]|\\.)*"`: text between double quotes, on one line. The lexer accepts a backslash followed by any character; it does not decide which escapes are valid. An unclosed `"` or a line break inside a literal is a lexing error.
+```text
+"([^"\\\n]|\\.)*"   "STRING"
+```
 
-The parser's `'STRING'` action decodes the token with `unescape` (after the second `%%` in `src/specs/parser.y`): it drops the surrounding quotes and translates each escape into one character.
+- A string is text between double quotes, on one line.
+- The lexer accepts a backslash followed by any character. It does not decide which escapes are valid.
+- An unclosed `"`, or a line break inside the string, is a lexer error.
+
+The parser's `'STRING'` action decodes the token with `unescape` (after the second `%%` in `src/specs/parser.y`). It removes the quotes and turns each escape into one character:
 
 | Escape | Becomes |
 |:---|:---|
@@ -84,10 +140,22 @@ The parser's `'STRING'` action decodes the token with `unescape` (after the seco
 | `\"` | a double quote |
 | anything else | error: `unknown escape \q` |
 
-Contract: `Literal::Str` always holds this decoded text, never the quotes or raw escapes, so later passes must not decode again. A newline is one character (byte 10) in the stored string; Rust's `{:?}` only displays it as `\n`.
+### Example
 
-### Intention
+```text
+"hello"
+"line one\nline two"
+"she said \"hi\""
+```
 
-Strings follow Go and Java: one built-in, immutable `str` type with no references, because it is simpler than Rust's `str`/`&str`/`String` (learner decision). Escapes are decoded in the parser, as rustc does, rather than kept raw as Go does (learner decision). Strings created at run time will need a garbage collector or unfreed memory; that is a runtime decision for later.
+### Notions used
+
+- **`Literal::Str`** is the AST node for a string. It always holds the decoded text, never the quotes or the raw escapes, so later passes must not decode it again. A newline is one character (byte 10) in the stored string; Rust's `{:?}` only displays it as `\n`.
+
+### Design reasons
+
+- Strings follow Go and Java: one built-in, immutable `str` type with no references. Rust instead has three: `str`, `&str` and `String`.
+- Escapes are decoded in the parser, as rustc does, not kept raw as Go does.
+- Strings created at run time will need a garbage collector, or memory that is never freed. That runtime decision is not made yet.
 
 Since: 2026-11-11

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use lrpar::Span;
 
 #[derive(Debug)]
@@ -26,7 +28,7 @@ pub enum Literal {
 #[derive(Debug)]
 pub enum Expr {
     Lit(Literal),
-    SelfValue,
+    SelfValue(Span),
     Path(Path),
     FieldInits(Vec<FieldInit>),
     Array(Vec<Expr>),
@@ -76,7 +78,7 @@ pub enum Stmt {
     Declaration(Let), // let mut x: int = 1;
     While(Box<Expr>, Box<Expr>),          // condition, body: while c { }
     Loop(Box<Expr>),                      // body: loop { }
-    For(String, Box<Expr>, Box<Expr>),    // variable, iterable, body: for i in 0..n { }
+    For(String, Span, Box<Expr>, Box<Expr>), // variable, its span, iterable, body: for i in 0..n { }
     Break,                                // break;
     Continue,                             // continue;
     Semi(Expr),  // expression with `;`: f(); value discarded
@@ -98,6 +100,7 @@ pub struct Let {
     tpe: Type,
     value: Expr,
     mutability: Mut,
+    span: Span
 }
 
 #[derive(Debug)]
@@ -129,12 +132,13 @@ pub struct Vis<T> {
 
 // Whether a function takes `self` as its first parameter (a method) or not (static).
 #[derive(Debug)]
-pub enum SelfParam { Not, Value }
+pub enum SelfParam { Not, Value(Span) } // Span: the `self` token in the parameter list
 
 #[derive(Debug)]
 pub struct Parameter {
     name: String,
     return_type: Type,
+    span: Span,
 }
 
 #[derive(Debug)]
@@ -193,14 +197,14 @@ impl Block {
 }
 
 impl Let {
-    pub fn new(name: String, tpe: Type, value: Expr, mutability: Mut) -> Self {
-        Let { name, tpe, value, mutability }
+    pub fn new(name: String, tpe: Type, value: Expr, mutability: Mut, span: Span) -> Self {
+        Let { name, tpe, value, mutability, span }
     }
 }
 
 impl Parameter {
-    pub fn new(name: String, return_type: Type) -> Self {
-        Parameter { name, return_type }
+    pub fn new(name: String, return_type: Type, span: Span) -> Self {
+        Parameter { name, return_type, span }
     }
 }
 

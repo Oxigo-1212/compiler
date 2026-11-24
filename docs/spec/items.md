@@ -2,9 +2,16 @@
 
 Reader: developers of the UPL compiler frontend.
 
-Updated: 2026-11-23.
+Updated: 2026-11-24.
 
-Level 4: items. An item is anything at the top level of a file, outside every block. The rules are in `src/specs/parser.y`.
+Level 4: items. The rules are in `src/specs/parser.y`.
+
+An **item** is a declaration fixed at compile time and visible throughout its enclosing module or block, in any order. Items are the unit of encapsulation: modules work together by sharing items, with `pub` controlling which items leave a module and `use` and `export` bringing them into another.
+
+- Most items are at the top level of a file. A function may also be declared inside a block (`Stmt::Item`). It is still an item, visible throughout that block.
+- An `impl` has no name of its own. Its methods are visible wherever its struct is.
+- Local bindings (parameters, `let` in a block, `for` variables) are not items. They exist only while their function runs, and they are visible only from their declaration to the end of their block.
+- Name resolution gives each item a definition id (`DefId`), shared by all later phases. Local bindings are identified by the span of their declaration instead.
 
 Sections:
 
@@ -143,8 +150,8 @@ fn outer() {
 enum ItemKind { Function(Vis<Function>), ... }
 struct Function {
     name: String,                // linking uses to definitions is name resolution's job
-    self_param: SelfParam,       // enum SelfParam { Not, Value }
-    parameters: Vec<Parameter>,  // struct Parameter { name: String, return_type: Type }
+    self_param: SelfParam,       // enum SelfParam { Not, Value(Span) }
+    parameters: Vec<Parameter>,  // struct Parameter { name: String, return_type: Type, span: Span }
     return_type: Option<Type>,   // None: no `-> Type`
     body: Block,
 }
@@ -157,7 +164,9 @@ Stmt::Item(ItemKind)             // a nested item inside a block
 - `Params` returns `(SelfParam, Vec<Parameter>)`, because the grammar finds `self` there.
 - The parameter's type field is named `return_type` in `src/ast.rs`, although it holds the parameter's type.
 
-Limit: names have no span, so an error cannot point at a definition.
+- A parameter's `span` covers `name: Type`. Name resolution uses it as the identity of the parameter.
+
+Limit: the function name has no span, so an error cannot point at a function definition.
 
 Since: 2026-11-11
 
@@ -173,7 +182,7 @@ A method is a function that works on a struct value. It gets that value through 
 Params -> Result<(SelfParam, Vec<Parameter>), ()>:
       /* empty */ { Ok((SelfParam::Not, vec![])) }
     | ParamList { ... } | ParamList ',' { ... }
-    | 'self' { Ok((SelfParam::Value, vec![])) }
+    | 'self' { Ok((SelfParam::Value($1.map_err(|_| ())?.span()), vec![])) }
     | 'self' ',' { ... }
     | 'self' ',' ParamList { ... } | 'self' ',' ParamList ',' { ... }
     ;
@@ -181,6 +190,7 @@ Params -> Result<(SelfParam, Vec<Parameter>), ()>:
 
 - `self` may be the first parameter, and only the first.
 - Inside the body, `self` is an expression, see [Primary](operations.md#primary).
+- `Value` carries the span of the `self` token only. Name resolution uses it as the identity of `self`, like a parameter's span. The whole rule's span (`$span`) is not used, because it would also cover the other parameters.
 - A static function is called through its path, as in `P::new()`.
 
 ### Example

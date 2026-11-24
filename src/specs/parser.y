@@ -79,7 +79,7 @@ Primary -> Result<Expr, ()>:
     | 'STRING' { Ok(Expr::Lit(Literal::Str(unescape(convert_lexeme($lexer, $1)?)?)))}  
     | 'true' { Ok(Expr::Lit(Literal::Bool(true))) }
     | 'false' { Ok(Expr::Lit(Literal::Bool(false))) }
-    | 'self' { Ok(Expr::SelfValue) }
+    | 'self' { Ok(Expr::SelfValue($span)) }
     | '(' Expr ')' { $2 }
     | '.' '{' FieldInits '}' { Ok(Expr::FieldInits($3?)) }
     | '.' '{' FieldInits ',' '}' { Ok(Expr::FieldInits($3?)) }
@@ -108,7 +108,7 @@ BinaryOperation -> Result<Expr, ()>:
     | BinaryOperation '==' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Eq, Box::new($3?))) }
     | BinaryOperation '!=' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Ne, Box::new($3?))) }
     | BinaryOperation '<' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Lt, Box::new($3?))) }
-    | BinaryOperation '<=' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Le, Box::new($3?))) }
+    | BinaryOperation '<='  BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Le, Box::new($3?))) }
     | BinaryOperation '>' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Gt, Box::new($3?))) }
     | BinaryOperation '>=' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Ge, Box::new($3?))) }
     | BinaryOperation '+' BinaryOperation { Ok(Expr::Binary(Box::new($1?), BinOp::Add, Box::new($3?))) }
@@ -148,8 +148,8 @@ Expr -> Result<Expr, ()>:
 // ---- statements ----
 // @doc: let
 Let -> Result<Let, ()>:
-      'let' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not)) }
-    | 'let' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $3)?, $5?, $7?, Mut::Mut)) }
+      'let' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not, $span)) }
+    | 'let' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $3)?, $5?, $7?, Mut::Mut, $span)) }
     ;
 // @doc: loop-stmt
 // Loops and loop jumps are statements: they produce no value.
@@ -160,7 +160,7 @@ Loop -> Result<Stmt, ()>:
       'loop' Block { Ok(Stmt::Loop(Box::new(Expr::Block($2?)))) }
     ;
 For -> Result<Stmt, ()>:
-      'for' 'ID' 'in' Expr Block { Ok(Stmt::For(convert_lexeme($lexer, $2)?, Box::new($4?), Box::new(Expr::Block($5?)))) }
+      'for' 'ID' 'in' Expr Block { Ok(Stmt::For(convert_lexeme($lexer, $2)?, $span, Box::new($4?), Box::new(Expr::Block($5?)))) }
     ;
 LoopStmt -> Result<Stmt, ()>:
       While { $1 }
@@ -227,7 +227,7 @@ Block -> Result<Block, ()>:
 // @doc: method-self
 // `self` may only be the first parameter; a function without it is static.
 Param -> Result<Parameter, ()>:
-      'ID' ':' Type { Ok(Parameter::new(convert_lexeme($lexer, $1)?, $3?)) }
+      'ID' ':' Type { Ok(Parameter::new(convert_lexeme($lexer, $1)?, $3?, $span)) }
     ;
 ParamList -> Result<Vec<Parameter>, ()>:
       Param { Ok(vec![$1?]) }
@@ -241,10 +241,10 @@ Params -> Result<(SelfParam, Vec<Parameter>), ()>:
       /* empty */ { Ok((SelfParam::Not, vec![])) }
     | ParamList { Ok((SelfParam::Not, $1?)) }
     | ParamList ',' { Ok((SelfParam::Not, $1?)) }
-    | 'self' { Ok((SelfParam::Value, vec![])) }
-    | 'self' ',' { Ok((SelfParam::Value, vec![])) }
-    | 'self' ',' ParamList { Ok((SelfParam::Value, $3?)) }
-    | 'self' ',' ParamList ',' { Ok((SelfParam::Value, $3?)) }
+    | 'self' { Ok((SelfParam::Value($1.map_err(|_| ())?.span()), vec![])) }
+    | 'self' ',' { Ok((SelfParam::Value($1.map_err(|_| ())?.span()), vec![])) }
+    | 'self' ',' ParamList { Ok((SelfParam::Value($1.map_err(|_| ())?.span()), $3?)) }
+    | 'self' ',' ParamList ',' { Ok((SelfParam::Value($1.map_err(|_| ())?.span()), $3?)) }
     ;
 // @doc: function
 Function -> Result<Function, ()>:
@@ -301,11 +301,11 @@ Export -> Result<(Path, Option<String>), ()>:
 // @doc: const-static
 // Module-level variables that may be `pub`. Both reuse the Let struct.
 Const -> Result<Let, ()>:
-      'const' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not)) }
+      'const' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not, $span)) }
     ;
 Static -> Result<Let, ()>:
-      'static' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not)) }
-    | 'static' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $3)?, $5?, $7?, Mut::Mut)) }
+      'static' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $2)?, $4?, $6?, Mut::Not, $span)) }
+    | 'static' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(convert_lexeme($lexer, $3)?, $5?, $7?, Mut::Mut, $span)) }
     ;
 // No inline modules (`mod m { .. }`): a module's contents always live in another file.
 Mod -> Result<String, ()>:

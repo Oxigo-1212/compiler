@@ -277,6 +277,12 @@ Visibility -> Result<Visibility, ()>:
       /* empty */ { Ok(Visibility::Private) }
     | 'pub' { Ok(Visibility::Pub) }
     ;
+// @doc: visibility
+// No `pub`: the name is private to its module and the modules below it.
+Visibility -> Result<Visibility, ()>:
+      /* empty */ { Ok(Visibility::Private) }
+    | 'pub' { Ok(Visibility::Pub) }
+    ;
 // @doc: impl-use-mod
 Functions -> Result<Vec<Vis<Function>>, ()>:
       /* empty */ { Ok(vec![]) }

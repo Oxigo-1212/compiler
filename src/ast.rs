@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use lrpar::Span;
 
 #[derive(Debug)]
@@ -14,8 +12,8 @@ pub enum Type {
 
 #[derive(Debug)]
 pub struct Path {
-    segments: Vec<String>,
-    pos: Span
+    pub segments: Vec<String>,
+    pub pos: Span
 }
 
 #[derive(Debug)]
@@ -68,9 +66,9 @@ pub enum UnOp {
 
 #[derive(Debug)]
 pub struct FieldInit {
-    name: String,
-    value: Expr,
-    pos: Span
+    pub name: String,
+    pub value: Expr,
+    pub pos: Span
 }
 
 #[derive(Debug)]
@@ -90,17 +88,17 @@ pub enum Stmt {
 
 #[derive(Debug)]
 pub struct Block {
-    stmts: Vec<Stmt>,
-    tail: Option<Box<Expr>>, // None: block has no value
+    pub stmts: Vec<Stmt>,
+    pub tail: Option<Box<Expr>>, // None: block has no value
 }
 
 #[derive(Debug)]
 pub struct Let {
-    name: String,
-    tpe: Type,
-    value: Expr,
-    mutability: Mut,
-    span: Span
+    pub name: String,
+    pub tpe: Type,
+    pub value: Expr,
+    pub mutability: Mut,
+    pub span: Span
 }
 
 #[derive(Debug)]
@@ -126,8 +124,8 @@ pub enum Visibility { Private, Pub }
 // A node that can be marked `pub`. Passes that only need the node read `node`.
 #[derive(Debug)]
 pub struct Vis<T> {
-    vis: Visibility,
-    node: T,
+    pub vis: Visibility,
+    pub node: T,
 }
 
 // Whether a function takes `self` as its first parameter (a method) or not (static).
@@ -136,36 +134,38 @@ pub enum SelfParam { Not, Value(Span) } // Span: the `self` token in the paramet
 
 #[derive(Debug)]
 pub struct Parameter {
-    name: String,
-    return_type: Type,
-    span: Span,
+    pub name: String,
+    pub return_type: Type,
+    pub span: Span,
 }
 
 #[derive(Debug)]
 pub struct Function {
-    name: String,
-    self_param: SelfParam,
-    parameters: Vec<Parameter>,
-    return_type: Option<Type>, // None: no `-> Type`, returns no value
-    body: Block,
+    pub name: String,
+    pub self_param: SelfParam,
+    pub parameters: Vec<Parameter>,
+    pub return_type: Option<Type>, // None: no `-> Type`, returns no value
+    pub body: Block,
+    pub span: Span
 }
 
 #[derive(Debug)]
 pub struct Field {
-    id: String,
-    field_type: Type,
+    pub id: String,
+    pub field_type: Type,
 }
 
 #[derive(Debug)]
 pub struct Struct {
-    field: Vec<Vis<Field>>, // empty for `struct E {}`
-    id: String,
+    pub field: Vec<Vis<Field>>, // empty for `struct E {}`
+    pub id: String,
+    pub span: Span,
 }
 
 #[derive(Debug)]
 pub struct Impl {
-    methods: Vec<Vis<Function>>,
-    id: String, // the type name; name resolution links it to its struct
+    pub methods: Vec<Vis<Function>>,
+    pub id: String, // the type name; name resolution links it to its struct
 }
 
 impl<T> Vis<T> {
@@ -210,8 +210,8 @@ impl Parameter {
 
 impl Function {
     pub fn new(name: String, self_param: SelfParam, parameters: Vec<Parameter>,
-               return_type: Option<Type>, body: Block) -> Self {
-        Function { name, self_param, parameters, return_type, body }
+               return_type: Option<Type>, body: Block, span: Span) -> Self {
+        Function { name, self_param, parameters, return_type, body, span }
     }
 }
 
@@ -222,8 +222,8 @@ impl Field {
 }
 
 impl Struct {
-    pub fn new(id: String, field: Vec<Vis<Field>>) -> Self {
-        Struct { field, id }
+    pub fn new(id: String, field: Vec<Vis<Field>>, span: Span) -> Self {
+        Struct { field, id, span }
     }
 }
 

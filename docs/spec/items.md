@@ -154,6 +154,7 @@ struct Function {
     parameters: Vec<Parameter>,  // struct Parameter { name: String, return_type: Type, span: Span }
     return_type: Option<Type>,   // None: no `-> Type`
     body: Block,
+    span: Span,                  // whole-rule span of the function definition
 }
 Stmt::Item(ItemKind)             // a nested item inside a block
 ```
@@ -163,10 +164,8 @@ Stmt::Item(ItemKind)             // a nested item inside a block
 - The body is typed `Block`, see [Block](expressions.md#block).
 - `Params` returns `(SelfParam, Vec<Parameter>)`, because the grammar finds `self` there.
 - The parameter's type field is named `return_type` in `src/ast.rs`, although it holds the parameter's type.
-
 - A parameter's `span` covers `name: Type`. Name resolution uses it as the identity of the parameter.
-
-Limit: the function name has no span, so an error cannot point at a function definition.
+- `Function.span` covers the whole function definition (`$span`), which name resolution copies into `Def.span` for diagnostics.
 
 Since: 2026-11-11
 
@@ -248,7 +247,9 @@ struct E { }
 
 ### AST representation (2026-11-16)
 
-`ItemKind::Struct(Vis<Struct>)`, with `Struct { field: Vec<Vis<Field>>, id }` and `Field { id, field_type }`.
+`ItemKind::Struct(Vis<Struct>)`, with `Struct { field: Vec<Vis<Field>>, id, span: Span }` and `Field { id, field_type }`.
+
+- `Struct.span` covers the whole struct definition (`$span`), which name resolution copies into `Def.span` for diagnostics.
 
 - `Field` is its own type, not a reused `Parameter`, so fields carry visibility (`Vis<Field>`) without changing parameters.
 - `struct E {}` stores an empty `Vec`, not an `Option`.

@@ -250,11 +250,11 @@ Params -> Result<(SelfParam, Vec<Parameter>), ()>:
 Function -> Result<Function, ()>:
       'fn' 'ID' '(' Params ')' Block {
                                        let (self_param, params) = $4?;
-                                       Ok(Function::new(convert_lexeme($lexer, $2)?, self_param, params, None, $6?))
+                                       Ok(Function::new(convert_lexeme($lexer, $2)?, self_param, params, None, $6?, $span))
                                      }
     | 'fn' 'ID' '(' Params ')' '->' Type Block {
                                                  let (self_param, params) = $4?;
-                                                 Ok(Function::new(convert_lexeme($lexer, $2)?, self_param, params, Some($7?), $8?))
+                                                 Ok(Function::new(convert_lexeme($lexer, $2)?, self_param, params, Some($7?), $8?, $span))
                                                }
     ;
 // @doc: struct
@@ -267,9 +267,9 @@ StructFields -> Result<Vec<Vis<Field>>, ()>:
     | Visibility 'ID' ':' Type { Ok(vec![Vis::new($1?, Field::new(convert_lexeme($lexer, $2)?, $4?))]) }
     ;
 Struct -> Result<Struct, ()>:
-      'struct' 'ID' '{' StructFields '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, $4?)) }
-    | 'struct' 'ID' '{' StructFields ',' '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, $4?)) }
-    | 'struct' 'ID' '{' '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, vec![])) }
+      'struct' 'ID' '{' StructFields '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, $4?, $span)) }
+    | 'struct' 'ID' '{' StructFields ',' '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, $4?, $span)) }
+    | 'struct' 'ID' '{' '}' { Ok(Struct::new(convert_lexeme($lexer, $2)?, vec![], $span)) }
     ;
 // @doc: visibility
 // No `pub`: the name is private to its module and the modules below it.

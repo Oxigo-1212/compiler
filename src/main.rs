@@ -1,5 +1,6 @@
 mod ast;
 mod error;
+mod symbol;
 
 use error::CompileError;
 

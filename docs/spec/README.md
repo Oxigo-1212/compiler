@@ -4,7 +4,7 @@ Purpose: index of the UPL frontend spec, and how its sections are laid out.
 
 Reader: developers of the UPL compiler frontend.
 
-Updated: 2026-11-23.
+Updated: 2026-11-25.
 
 The spec is ordered by the levels of the language, from tokens up to items. Each level contains the one below it, see [Levels of the language](../grammar.md#levels-of-the-language).
 
@@ -17,6 +17,7 @@ The spec is ordered by the levels of the language, from tokens up to items. Each
 | 4. Items | [items.md](items.md) | Program, Function, Self parameter, Struct, Impl, Visibility, Use export and mod, Const and static |
 | Types | [types.md](types.md) | Type |
 | Modules | [modules.md](modules.md) | Module layout, Paths, Visibility, Imports and exports |
+| Symbol table | [symbol-table.md](symbol-table.md) | Definition, Scopes inside a function body |
 
 Theory: [ast.md](ast.md) explains what the AST is (structure without notation, before meaning), with the example `a + b * c`. [sdt.md](sdt.md) explains how the grammar actions build the AST, and why that translation is S-attributed.
 

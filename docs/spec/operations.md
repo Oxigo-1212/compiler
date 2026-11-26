@@ -43,7 +43,7 @@ Primary -> Result<Expr, ()>:
     | 'STRING' { ... Literal::Str ... }
     | 'true' { Ok(Expr::Lit(Literal::Bool(true))) }
     | 'false' { Ok(Expr::Lit(Literal::Bool(false))) }
-    | 'self' { Ok(Expr::SelfValue) }
+    | 'self' { Ok(Expr::SelfValue($span)) }
     | '(' Expr ')' { $2 }
     | '.' '{' FieldInits '}' | '.' '{' FieldInits ',' '}' | '.' '{' '}'   // struct literals
     | '[' ElementList ']' | '[' ElementList ',' ']'                       // array literals
@@ -89,7 +89,7 @@ Each alternative holds only what is written at that spot in the source, without 
 | `'INTEGER'` | `42` | the value |
 | `'STRING'` | `"hi"` | the decoded text |
 | `'true'`, `'false'` | `true` | the boolean |
-| `'self'` | `self` | nothing: only "self appears here" |
+| `'self'` | `self` | its span only |
 
 A literal carries no name. In `let x: int = 42;` the name `x` belongs to the `Let` node, and the literal `42` holds only its value. The same literal could appear in `f(42)` or `[42]`, with no name at all:
 
@@ -97,7 +97,7 @@ A literal carries no name. In `let x: int = 42;` the name `x` belongs to the `Le
 Let { name: "x", tpe: Int32, value: Lit(Int(42)), mutability: Not }
 ```
 
-`self` carries no data, because the parser cannot know which object it refers to. That depends on the call (`p.get()` or `q.get()`) at run time. A later pass checks that `self` is inside a method and gives it the type of that `impl`'s struct.
+`self` carries only its span (`Expr::SelfValue(Span)`), because the parser cannot know which object it refers to. That depends on the call (`p.get()` or `q.get()`) at run time. A later pass checks that `self` is inside a method and gives it the type of that `impl`'s struct. Name resolution uses the span as the key of this use of `self`, as it does for a `Path`.
 
 Since: 2026-11-11 (explanation added 2026-11-13)
 

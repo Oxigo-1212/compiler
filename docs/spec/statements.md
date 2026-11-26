@@ -81,8 +81,8 @@ Since: 2026-11-11
 
 ```rust
 Let -> Result<Let, ()>:
-      'let' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(name, tpe, value, Mut::Not)) }
-    | 'let' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(name, tpe, value, Mut::Mut)) }
+      'let' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(name, tpe, value, Mut::Not, $span)) }
+    | 'let' 'mut' 'ID' ':' Type '=' Expr ';' { Ok(Let::new(name, tpe, value, Mut::Mut, $span)) }
     ;
 ```
 
@@ -109,10 +109,12 @@ let p: P = .{ x: 3 };
 ### AST representation (2026-11-16)
 
 ```rust
-struct Let { name: String, tpe: Type, value: Expr, mutability: Mut }   // enum Mut { Not, Mut }
+struct Let { name: String, tpe: Type, value: Expr, mutability: Mut, span: Span }   // enum Mut { Not, Mut }
 Stmt::Declaration(Let)   // inside a block
 ItemKind::Let(Let)       // at the top level
 ```
+
+`span` is the source range of the whole declaration, from `let` to `;`. Name resolution uses it as the identity of the declaration, so each use of `x` can record which `let` it refers to.
 
 The `Let` rule returns `Let`, and each parent wraps it. The struct is shared, not stored as `ItemKind::Let(Stmt)`, so the type guarantees that a top-level item holds a declaration. `Block` is a separate struct for the same reason.
 
@@ -134,7 +136,7 @@ Loop -> Result<Stmt, ()>:
       'loop' Block { Ok(Stmt::Loop(Box::new(Expr::Block($2?)))) }
     ;
 For -> Result<Stmt, ()>:
-      'for' 'ID' 'in' Expr Block { Ok(Stmt::For(convert_lexeme($lexer, $2)?, Box::new($4?), Box::new(Expr::Block($5?)))) }
+      'for' 'ID' 'in' Expr Block { Ok(Stmt::For(convert_lexeme($lexer, $2)?, $span, Box::new($4?), Box::new(Expr::Block($5?)))) }
     ;
 LoopStmt -> Result<Stmt, ()>:
       While { $1 }
@@ -173,10 +175,10 @@ for i in 0 .. 3 { f(i); }
 
 ### AST representation (2026-11-15)
 
-`Stmt::While(cond, body)`, `Stmt::Loop(body)`, `Stmt::For(name, iterable, body)`, `Stmt::Break` and `Stmt::Continue`.
+`Stmt::While(cond, body)`, `Stmt::Loop(body)`, `Stmt::For(name, span, iterable, body)`, `Stmt::Break` and `Stmt::Continue`.
 
 - The body is the whole `Block`, wrapped as `Expr::Block`. The loop ignores the body's tail value.
-- The `for` variable is a `String`, like the name in `let`.
+- The `for` variable is a `String`, like the name in `let`. The `Span` after it covers the whole loop. Name resolution uses it as the identity of the variable, in the same way as the span of `Let`.
 
 Not checked by the parser: that `break` and `continue` are inside a loop, and whether a loop body may have a tail value.
 
